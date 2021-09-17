@@ -8,7 +8,6 @@
 #include <stdlib.h>
 using namespace std;
 
-
 string Ackerman::get_time_diff(struct timeval * tp1, struct timeval * tp2) {
   /* Returns a string containing the difference, in seconds and micro seconds, between two timevals. */
   long sec = tp2->tv_sec - tp1->tv_sec;

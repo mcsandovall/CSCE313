@@ -2,7 +2,7 @@
 #include <iostream>
 #include <math.h>
 using namespace std;
-BlockHeader::BlockHeader* split(BlockHeader* b){
+BlockHeader* split(BlockHeader* b){
   int bs = b->block_size;
   b->block_size /= 2;
   b->next = nullptr;
@@ -12,6 +12,10 @@ BlockHeader::BlockHeader* split(BlockHeader* b){
   sh->next = nullptr;
   b->next = sh;
   return sh;
+}
+
+bool arebuddies (BlockHeader* block1, BlockHeader* block2){
+  return block2->isfree && (block1->block_size == block2->block_size);
 }
 
 BuddyAllocator::BuddyAllocator (int _basic_block_size, int _total_memory_length){

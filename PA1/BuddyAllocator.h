@@ -74,7 +74,9 @@ private:
 	/* private function you are required to implement
 	 this will allow you and us to do unit test */
 	
-	BlockHeader* getbuddy (BlockHeader * addr); 
+	BlockHeader* getbuddy (BlockHeader * addr){
+		return ((addr - start) ^ addr->block_size) + start;
+	} 
 	// given a block address, this function returns the address of its buddy 
 	
 	bool arebuddies (BlockHeader* block1, BlockHeader* block2);

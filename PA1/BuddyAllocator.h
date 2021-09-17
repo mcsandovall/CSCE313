@@ -28,11 +28,28 @@ public:
 
 	LinkedList (BlockHeader* h = nullptr){ head = h;}
 	void insert (BlockHeader* b){	// adds a block to the list
-
+		if(!head){
+			head = b;
+			head->next = nullptr;
+			head->isfree = true;
+		}
+		BlockHeader* temp = head;
+		while(temp->next){
+			temp = temp->next;
+		}
+		temp->next = b;
+		b->next = nullptr;
+		b->isfree = true;
 	}
 
 	void remove (BlockHeader* b){  // removes a block from the list
-
+		BlockHeader* temp = head;
+		while((temp->next != b) && (temp->next)){
+			temp = temp->next;
+		}
+		temp->next = b->next;
+		b->next = nullptr;
+		b->isfree = false;
 	}
 
 	BlockHeader* remove(){ // return the first item from the list

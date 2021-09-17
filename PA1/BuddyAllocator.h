@@ -2,6 +2,7 @@
 #define _BuddyAllocator_h_
 #include <iostream>
 #include <vector>
+#include <assert.h>
 using namespace std;
 typedef unsigned int uint;
 
@@ -12,6 +13,11 @@ public:
 	// think about what else should be included as member variables
 	int block_size;  // size of the block
 	BlockHeader* next; // pointer to the next block
+	bool isfree;
+	BlockHeader(int _s = 0){
+		block_size= _s;
+		next = nullptr;
+	}
 };
 
 class LinkedList{
@@ -19,12 +25,22 @@ class LinkedList{
 public:
 	BlockHeader* head;		// you need a head of the list
 public:
+
+	LinkedList (BlockHeader* h = nullptr){ head = h;}
 	void insert (BlockHeader* b){	// adds a block to the list
 
 	}
 
 	void remove (BlockHeader* b){  // removes a block from the list
 
+	}
+
+	BlockHeader* remove(){ // return the first item from the list
+		assert(head != nullptr);
+		BlockHeader* b = head;
+		head = head->next;
+		b->isfree = false;
+		return b;
 	}
 };
 
@@ -35,6 +51,7 @@ private:
 	vector<LinkedList> FreeList;
 	int basic_block_size;
 	int total_memory_size;
+	BlockHeader* start;
 
 private:
 	/* private function you are required to implement

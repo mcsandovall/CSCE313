@@ -1,21 +1,62 @@
 #include "BuddyAllocator.h"
 #include <iostream>
+#include <math.h>
 using namespace std;
+BlockHeader::BlockHeader* split(BlockHeader* b){
+  int bs = b->block_size;
+  b->block_size /= 2;
+  b->next = nullptr;
+
+  BlockHeader* sh = (BlockHeader*) ((char*)b + b->block_size);
+  sh->block_size = b->block_size;
+  sh->next = nullptr;
+  b->next = sh;
+  return sh;
+}
 
 BuddyAllocator::BuddyAllocator (int _basic_block_size, int _total_memory_length){
-	
+	total_memory_size = _total_memory_length;
+  basic_block_size = _basic_block_size;
+  start = new BlockHeader [total_memory_size];
+  int l = ceil(log2(total_memory_size/basic_block_size));
+  for(int i  = 0; i < l; ++i){
+    FreeList.push_back(LinkedList());
+  }
+  FreeList.push_back(LinkedList(start));
+  BlockHeader* h = new (start) BlockHeader(total_memory_size);
+  h->isfree = true;
 }
 
 BuddyAllocator::~BuddyAllocator (){
-	
+	delete[] start;
 }
 
 char* BuddyAllocator::alloc(int _length) {
-  /* This preliminary implementation simply hands the call over the 
-     the C standard library! 
-     Of course this needs to be replaced by your implementation.
-  */
-  return new char [_length];
+  int x = _length + sizeof(BlockHeader);
+  int index = (int) ceil(log2(ceil((double) x /  basic_block_size)));
+  if (FreeList[index].head != nullptr){ // found the blcok that i am looking for
+    BlockHeader* b = FreeList[index].remove();
+    return (char*) (b+1);
+  }
+
+  int indexCorrect = index;
+  for(; index < FreeList.size();++index){
+    if(FreeList[index].head){
+      break;
+    }
+  }
+  if(index >= FreeList.size()){ // no bigger block found
+    return nullptr;
+  }
+
+  // a bigger block found
+  while(index >= indexCorrect){
+    BlockHeader* b = FreeList[index].remove(); // gets the head of the index
+    BlockHeader* shb = split(b);
+    FreeList[--index].insert(b);
+    FreeList[--index].insert(shb);
+  }
+  return (char*) (FreeList[index].remove() + 1);
 }
 
 int BuddyAllocator::free(char* _a) {

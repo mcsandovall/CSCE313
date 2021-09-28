@@ -21,7 +21,10 @@ int main(){
     while(true){
         cout << get_username() <<"'s shell" << get_directory() << " $ ";
         getline(cin, inputline);
-        args = pareseString(inputline);
+        if(inputline == "exit" || inputline.size() == 0){
+            cout << "Bye " << get_username() <<"!! End of Shell" << endl;
+            exit(EXIT_SUCCESS);
+        }
         cout << parsePipe(inputline,commands) << endl;
         cout << commands.size() << endl;
         //runCommand(args);

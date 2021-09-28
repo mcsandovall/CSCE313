@@ -42,6 +42,16 @@ void printPrompt(){
     cout << "Welcome " << get_username() << " Time and Date: " << get_dateNtime() << endl;
 }
 
+// make an object to hold the commands and the filename if there is any
+class Command{
+    private:
+        string name;
+        vector<string> args;
+
+        bool isBackrgoundProcess = false;
+        string redirectFile;
+};
+
 int parsePipe(string input, vector<string> &commands){
     // get all the pipes 
     int pos = input.find("|");
@@ -58,6 +68,16 @@ int parsePipe(string input, vector<string> &commands){
         }
         commands.push_back(input); // add the last commands to the vector of commands
         return 1; // status 1 for there is pipes
+    }
+}
+
+int IORedirect(string command){
+    // get the first kind of IO redirect that happens EX: ls -l > file.txt < args:  this will execute everything before <
+    // status 0 there is no IO redirect, 1 output, 2 input
+    int input = command.find("<");
+    int output = command.find(">");
+    if(input == -1 && output == -1){
+        
     }
 }
 

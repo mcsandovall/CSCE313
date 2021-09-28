@@ -9,35 +9,9 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <ctime>
 
 using namespace std;
-
-class Command{
-    private:
-        char* name;
-        char** arguments;
-
-    public:
-        void set_name(vector<string> str){
-            name = (char*) str[0].c_str();
-        }
-
-        void set_arguments(vector<string> str){
-            if (str.size() == 1){
-                return;
-            }
-
-            arguments = new char*[str.size()+2];
-            for(int i = 1; i < str.size();++i){
-                arguments[i-1] = (char*) str[i].c_str();
-            }
-            arguments[str.size()+1] = NULL;
-        }
-
-        char* get_name(){return name;}
-        char** get_arguments(){return arguments;}
-
-};
 
 string get_directory(){
     char buf[FILENAME_MAX];
@@ -50,7 +24,42 @@ string get_username(){
     return getenv("USER");
 }
 
-// get the commands into tokens, then if there is a | use the pipeParse and > or < use a ex
+// get the date and time for the prompt 
+string get_dateNtime(){
+    time_t now  = time(0);
+    return ctime(&now);
+}
+
+// user prompt
+void printPrompt(){
+    cout << "######################################" << endl;
+    cout << "######################################" << endl;
+    cout << "########## Current Version ###########" << endl;
+    cout << "########## of mariOS shell ###########" << endl;
+    cout << "######################################" << endl;
+    cout << "######################################" << endl;
+    cout << endl;
+    cout << "Welcome " << get_username() << " Time and Date: " << get_dateNtime() << endl;
+}
+
+int parsePipe(string input, vector<string> &commands){
+    // get all the pipes 
+    int pos = input.find("|");
+    if(pos == -1){ // there is no pipes
+        commands.push_back(input);
+        return 0; // status no pipe
+    }else{ // there is a pipe
+        string line;
+        while(pos != -1){ // process while there is a stilla pipe
+            line = input.substr(0,pos);
+            commands.push_back(line); // add the line to commands
+            input = input.substr(pos+1); // get everything after the pipe
+            pos = input.find("|");
+        }
+        commands.push_back(input); // add the last commands to the vector of commands
+        return 1; // status 1 for there is pipes
+    }
+}
 
 // parse the input string and return the char** for the execution
 char** pareseString(string input){

@@ -15,12 +15,16 @@ int main(){
 
     string inputline;
     char** args;
-    
+    printPrompt();
+    vector<string> commands;
+
     while(true){
         cout << get_username() <<"'s shell" << get_directory() << " $ ";
         getline(cin, inputline);
         args = pareseString(inputline);
-        runCommand(args);
+        cout << parsePipe(inputline,commands) << endl;
+        cout << commands.size() << endl;
+        //runCommand(args);
     }
     
     // while(true){

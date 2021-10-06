@@ -103,13 +103,13 @@ class pipeline_commands{
 
                 if(inputline[i] == '\''){
                     pos = i+1;
-                    i += (inputline.substr(++i).find("\'"));
+                    i += (inputline.substr(pos).find("\'"));
                     removeLast = true;
                 }
 
                 if(inputline[i] == '\"'){
                     pos = i+1;
-                    i += (inputline.substr(++i).find("\""));
+                    i += (inputline.substr(pos).find("\""));
                     removeLast = true;
                 }
 
@@ -197,37 +197,38 @@ pipeline_commands parseString(string inputline){
     int pos = 0;
     bool removeLast = false;
     for (int i = 0; i <= inputline.size(); ++i){
-        if(inputline[i] == ' ' || i == inputline.size()){
-            token = inputline.substr(pos,i-pos);
-            if(removeLast){
-                token = token.substr(0,token.size()-1);
-                removeLast = false;
-            }
-            cmd.push_back(token);
-            pos = i+1; // get the pos after the command
-        }
 
         if(inputline[i] == '\''){
             pos = i+1;
-            i += (inputline.substr(++i).find("\'"));
+            i += (inputline.substr(pos).find("\'")+1);
             removeLast = true;
         }
 
         if(inputline[i] == '\"'){
             pos = i+1;
-            i += (inputline.substr(++i).find("\""));
+            i += (inputline.substr(pos).find("\"")+1);
             removeLast = true;
         }
 
+        if(inputline[i] == ' ' || i >= inputline.size()){
+            token = inputline.substr(pos,i-pos);
+            if(removeLast){
+                token = token.substr(0,token.size()-1);
+                removeLast = false;
+            }
+            cout << token << endl;
+            cmd.push_back(token);
+            pos = i+1; // get the pos after the command
+        }
+
         // parse by pipes 
-        if(inputline[i] == '|' || i == inputline.size()){
+        if(inputline[i] == '|' || i >= inputline.size()){
             Command new_command(cmd);
             commands.push_back(new_command);
             cmd.clear();
             i += 2;
             pos = i;
         }
-        
     }
     pipeline_commands n_cmds;
     n_cmds.cmds = commands;

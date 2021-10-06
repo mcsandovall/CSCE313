@@ -4,31 +4,28 @@
 #include <unistd.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include "test.h"
 
-#include "shell.h"
 using namespace std;
 
 
 
 
 int main(){
-
-    string inputline;
-    char** args;
     printPrompt();
-    vector<string> commands;
-
+    string input;
     while(true){
-        cout << get_username() <<"'s shell" << get_directory() << " $ ";
-        getline(cin, inputline);
-        if(inputline == "exit" || inputline.size() == 0){
-            cout << "Bye " << get_username() <<"!! End of Shell" << endl;
+        cout << get_username() << "'s shell" << get_directory() << "$ ";
+        getline(cin, input);
+        if(input == "exit" || input == " "){
+            cout << "Bye!! End of Shell" << endl;
             exit(EXIT_SUCCESS);
         }
-        cout << parsePipe(inputline,commands) << endl;
-        cout << commands.size() << endl;
-        //runCommand(args);
+        pipeline_commands cmds = parseString(input);
+        print_pipeCmds(cmds);
+        cout << cmds.size << endl;
     }
+    
     
     // while(true){
     //     cout << "My Shell " << get_directory() << " $ ";

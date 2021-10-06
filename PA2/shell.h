@@ -30,6 +30,14 @@ string get_dateNtime(){
     return ctime(&now);
 }
 
+// function for testing pruposes
+void printVector(vector<string> cmd){
+    for(int i =0; i < cmd.size();++i){
+        cout << cmd[i] << " ";
+    }
+    cout << endl;
+}
+
 // user prompt
 void printPrompt(){
     cout << "######################################" << endl;
@@ -42,15 +50,54 @@ void printPrompt(){
     cout << "Welcome " << get_username() << " Time and Date: " << get_dateNtime() << endl;
 }
 
-// make an object to hold the commands and the filename if there is any
-class Command{
-    private:
-        string name;
-        vector<string> args;
-
-        bool isBackrgoundProcess = false;
-        string redirectFile;
+// for the lexical analyzer use an enum type
+enum TokenType{
+    
 };
+// crete structures that will help me later on 
+class SimpleCommand{
+    public:
+        // this is what I will need for a simple command
+        string line;
+        vector<string> args;
+};
+
+class Command{ // this command is more involved
+    vector<SimpleCommand> simple_commads;
+    string outfile;
+    string infile;
+    bool is_backgroundProcess;
+
+};
+
+//requirement 1 check for quotes single and double 
+void parseQuotes(string input, vector<string> &cmd){
+    bool singleQuote = (input.find("\'") != -1);
+    bool doubleQuote = (input.find("\"") != -1);
+
+    // base case
+    if(!singleQuote && !doubleQuote){
+        cmd.push_back(input);
+        return; // end no quotes
+    }
+
+    if(singleQuote && !doubleQuote){
+        string str = input.substr(0,input.find("\'"));
+        cmd.push_back(str);
+        input = input.substr(input.find("\'")+1);
+        parseQuotes(input,cmd);
+    }
+
+    if(!singleQuote && doubleQuote){
+        string str = input.substr(0,input.find("\""));
+        cmd.push_back(str);
+        input = input.substr(input.find("\"")+1);
+        parseQuotes(input,cmd);
+    }   
+}
+
+// make an object to hold the commands and the filename if there is any
+
 
 int parsePipe(string input, vector<string> &commands){
     // get all the pipes 
@@ -71,16 +118,31 @@ int parsePipe(string input, vector<string> &commands){
     }
 }
 
-int IORedirect(string command){
-    // get the first kind of IO redirect that happens EX: ls -l > file.txt < args:  this will execute everything before <
-    // status 0 there is no IO redirect, 1 output, 2 input
-    int input = command.find("<");
-    int output = command.find(">");
-    if(input == -1 && output == -1){
-        
+
+int caseIORedirect(string command){
+    // check to see what type of io redirect do you have 
+    bool inputExist = (command.find(">") != -1);
+    bool outputExist = (command.find("<") != -1);
+
+    if(!inputExist && !outputExist){
+        return 0; // no io redirection
     }
+    if(!inputExist && outputExist){
+        return 1; // output redirection
+    }
+    if(inputExist && !outputExist){
+        return 2; // input redirection
+    }
+    if(inputExist && outputExist){
+        return 3; // both input and output redirection
+    }
+    return -1; // error neither of those worked 
 }
 
+void parseQuotes(string input){
+    // this is to parse single and double quotes NOTE: single quotes are literal and double quotes is the command
+    //
+}
 // parse the input string and return the char** for the execution
 char** pareseString(string input){
     if(input == "exit" || input.size() == 0){

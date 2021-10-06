@@ -50,26 +50,6 @@ void printPrompt(){
     cout << "Welcome " << get_username() << " Time and Date: " << get_dateNtime() << endl;
 }
 
-// for the lexical analyzer use an enum type
-enum TokenType{
-    
-};
-// crete structures that will help me later on 
-class SimpleCommand{
-    public:
-        // this is what I will need for a simple command
-        string line;
-        vector<string> args;
-};
-
-class Command{ // this command is more involved
-    vector<SimpleCommand> simple_commads;
-    string outfile;
-    string infile;
-    bool is_backgroundProcess;
-
-};
-
 //requirement 1 check for quotes single and double 
 void parseQuotes(string input, vector<string> &cmd){
     bool singleQuote = (input.find("\'") != -1);

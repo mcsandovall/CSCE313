@@ -21,27 +21,10 @@ int main(){
             cout << "Bye!! End of Shell" << endl;
             exit(EXIT_SUCCESS);
         }
-        pipeline_commands cmds = parseString(input);
-        print_pipeCmds(cmds);
-        cout << cmds.size << endl;
-    }
-    
-    
-    // while(true){
-    //     cout << "My Shell " << get_directory() << " $ ";
-    //     getline (cin, inputline); // get the line from standard input 
-    //     if(inputline == string("exit")){
-    //         cout << "Bye!! End of Shell" << endl;
-    //         break;
-    //     }
-    //     int pid = fork();
-    //     if(pid == 0){ // child process
-    //         // preparing the input command for execution
-    //         char* args[] = {(char*) inputline.c_str(),NULL};
-    //         execvp (args[0], args);
-    //     }else{
-    //         waitpid(pid, 0, 0);
-    //     }
+        pipeline_commands commands(input);
         
-    // }
+        // check if the commands were structured correctly
+        print_pipeCmds(commands);
+
+    }
 }

@@ -8,23 +8,58 @@
 
 using namespace std;
 
-
-
-
 int main(){
-    printPrompt();
+    vector<int>bgps; // for background processes
+    printPrompt(); // print the prompt
     string input;
     while(true){
+        for(int i = 0; i < bgps.size(); ++i){
+            if(waitpid(bgps[i],0,WNOHANG) == bgps[i]){
+                bgps.erase(bgps.begin() + i);
+                i--;
+            }
+        }
         cout << get_username() << "'s shell" << get_directory() << "$ ";
         getline(cin, input);
-        if(input == "exit" || input == " "){
-            cout << "Bye!! End of Shell" << endl;
-            exit(EXIT_SUCCESS);
+        if(input == "exit"){
+            cout << "Bye!! " << get_username() <<" End of Shell" << endl;
+            break;
         }
-        pipeline_commands commands(input);
         
-        // check if the commands were structured correctly
-        print_pipeCmds(commands);
+        pipeline_commands commands(input); // this takes care of the parsing in the constructor
+         
+        int prevFD[2];
+        int nextFD[2];
+        bool first = true;
+        for(int i = 0; i < commands.size; ++i){
+            if(i < commands.size-1){
+                pipe(nextFD);
+            }
+            int pid = fork();
+            if(!pid){
+                if(!first){
+                    dup2(prevFD[0],0);
+                    close(prevFD[1]);
+                }
 
+                if(i < commands.size-1){
+                    close(nextFD[0]);
+                    dup2(nextFD[1],1);
+                }
+                execute(commands.cmds[i]);
+            }else{
+                if(!first){
+                    close(prevFD[0]);
+                    close(prevFD[1]);
+                }
+                if(i < commands.size-1){
+                    prevFD[0] = nextFD[0];
+                    prevFD[1] = nextFD[1];
+                }else{
+                    waitpid(pid, 0, 0);
+                }
+            }
+            first = false;
+        }
     }
 }

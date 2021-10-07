@@ -118,11 +118,6 @@ int caseIORedirect(string command){
     }
     return -1; // error neither of those worked 
 }
-
-void parseQuotes(string input){
-    // this is to parse single and double quotes NOTE: single quotes are literal and double quotes is the command
-    //
-}
 // parse the input string and return the char** for the execution
 char** pareseString(string input){
     if(input == "exit" || input.size() == 0){

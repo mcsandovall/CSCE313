@@ -1,0 +1,10 @@
+USERCOMMAND
+_mdnsresponder/usr/sbin/mDNSResponder
+_windowserver/System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer
+mariopinto/Applications/Google
+mariopinto/System/Applications/Messages.app/Contents/MacOS/Messages
+mariopinto/private/var/folders/n4/1yvcp5d14djdfjrrffsl463c0000gn/T/AppTranslocation/5F242013-381F-4978-892A-3D25FC344EB2/d/Visual
+mariopinto/private/var/folders/n4/1yvcp5d14djdfjrrffsl463c0000gn/T/AppTranslocation/5F242013-381F-4978-892A-3D25FC344EB2/d/Visual
+mariopinto/private/var/folders/n4/1yvcp5d14djdfjrrffsl463c0000gn/T/AppTranslocation/5F242013-381F-4978-892A-3D25FC344EB2/d/Visual
+mariopinto/usr/libexec/rapportd
+root/Library/SystemExtensions/53F57937-51DE-4CF3-A6B9-35D54FF52247/com.cisco.anyconnect.macos.acsockext.systemextension/Contents/MacOS/com.cisco.anyconnect.macos.acsockext

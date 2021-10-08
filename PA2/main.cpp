@@ -22,7 +22,7 @@ int main(){
         cout << get_username() << "'s shell" << get_directory() << "$ ";
         getline(cin, input);
         if(input == "exit"){
-            cout << "Bye!! " << get_username() <<" End of Shell" << endl;
+            cout << "Bye " << get_username() <<"!! End of Shell" << endl;
             break;
         }
         
@@ -32,6 +32,12 @@ int main(){
         int nextFD[2];
         bool first = true;
         for(int i = 0; i < commands.size; ++i){
+            // check for change directory
+            if(commands.cmds[i].name == "cd"){
+                exec_chdr(commands.cmds[i]);
+                break;
+            }
+
             if(i < commands.size-1){
                 pipe(nextFD);
             }
@@ -56,7 +62,11 @@ int main(){
                     prevFD[0] = nextFD[0];
                     prevFD[1] = nextFD[1];
                 }else{
-                    waitpid(pid, 0, 0);
+                    if(!commands.cmds[i].backgroundProcess){
+                        waitpid(pid, 0, 0);
+                    }else{
+                        bgps.push_back(pid);
+                    }
                 }
             }
             first = false;

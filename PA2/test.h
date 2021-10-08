@@ -10,7 +10,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <ctime>
-#include <stack>
+#include <curses.h>
 
 using namespace std;
 
@@ -177,18 +177,32 @@ void print_pipeCmds(pipeline_commands comds){
         printCommand(comds.cmds[i]);
     }
 }
+vector<string> directories; // for the previous command
 
 int exec_chdr(Command cmd){
+    string filepath;
+    directories.push_back(get_directory());
     if(cmd.filename[STDOUT_FILENO].empty()){
         cout << "cd: no such file or directory: " + cmd.filename[STDOUT_FILENO] << endl;
         exit(EXIT_FAILURE);
+    }
+    if(cmd.filename[STDOUT_FILENO] == "-"){ // for the previous directory
+        directories.pop_back(); // get rid of the current one
+        filepath = directories.back();
+        directories.pop_back();
+        return chdir(filepath.c_str());
     }
     // for all cd commands I will use the STDOUT fileaname
     if(cmd.filename[STDOUT_FILENO] == ".."){
         return chdir(cmd.filename[STDOUT_FILENO].c_str());
     }
     // get the current working directory and add the filename
-    string filepath = get_directory() + "/" + cmd.filename[STDOUT_FILENO];
+    if(cmd.filename[STDOUT_FILENO][0] == '/'){
+        filepath = cmd.filename[STDOUT_FILENO];
+    }else{
+        filepath = get_directory() + "/" + cmd.filename[STDOUT_FILENO];
+    }
+    // filepath = get_directory() + "/" + cmd.filename[STDOUT_FILENO];
     if(chdir(filepath.c_str()) != 0){
         cout << "cd: no such file or directory: " + cmd.filename[STDOUT_FILENO] << endl;
         exit(EXIT_FAILURE);
@@ -198,70 +212,32 @@ int exec_chdr(Command cmd){
 
 void exec_redir(Command command){
     int fd[2];
-    int pid = fork();
-    int process;
-    if(!pid){
-        string filepath = get_directory();
-        if(command.redirect[STDIN_FILENO] != -1){ // standard input <
-            filepath += command.filename[STDIN_FILENO];
-            fd[STDIN_FILENO] = open(filepath.c_str(), O_RDONLY);
-            dup2(fd[STDIN_FILENO], STDIN_FILENO);
-            process = STDIN_FILENO;
-        }
-        if(command.redirect[STDOUT_FILENO] != -1){ // standard output >
-            filepath = command.filename[STDOUT_FILENO];
-            fd[STDOUT_FILENO] = open(filepath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
-            dup2(fd[STDOUT_FILENO], STDOUT_FILENO); 
-            process = STDOUT_FILENO;
-        }
-        execvp(command.get_name(),command.get_args());
-    }else{
-        waitpid(pid,0,0);
-        close(fd[process]);
+    string filepath = get_directory() + "/";
+    if(command.redirect[STDIN_FILENO] != -1){ // standard input <
+        filepath += command.filename[STDIN_FILENO];
+        fd[STDIN_FILENO] = open(filepath.c_str(), O_RDONLY);
+        dup2(fd[STDIN_FILENO], STDIN_FILENO);
     }
-}
-
-
-int exe_command(Command command){
-    if(command.name == "cd"){
-        return exec_chdr(command);
+    if(command.redirect[STDOUT_FILENO] != -1){ // standard output >
+        filepath = command.filename[STDOUT_FILENO];
+        fd[STDOUT_FILENO] = open(filepath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
+        dup2(fd[STDOUT_FILENO], STDOUT_FILENO);
     }
-
-    if(command.redirect[STDOUT_FILENO] != -1 || command.redirect[STDIN_FILENO] != -1){
-        exec_redir(command);
-    }
-
-    return execvp(command.get_name(),command.get_args());
-}
-
-int exec_pipes(pipeline_commands commands){
-    int state;
-    for(int i = 0; i < commands.size ; ++i){
-        int fd[2];
-        pipe(fd);
-        int pid = fork();
-        if(!pid){
-            dup2(fd[STDOUT_FILENO], STDOUT_FILENO);
-            // state = exe_command(commands.cmds[i]);
-            exe_command(commands.cmds[i]);
-        }else{
-            waitpid(pid, 0, 0);
-            dup2(fd[STDIN_FILENO],STDIN_FILENO);
-            close(fd[STDOUT_FILENO]);
-        }
-    }
-    return state;
+    execvp(command.get_name(),command.get_args());
+    close(fd[STDIN_FILENO]);
 }
 
 void execute(Command command){
-    if(command.name == "cd"){
-        exec_chdr(command);
-    }
 
     if(command.redirect[STDOUT_FILENO] != -1 || command.redirect[STDIN_FILENO] != -1){
         exec_redir(command);
+        return;
     }
 
-    execvp(command.get_name(),command.get_args());    
+    if(execvp(command.get_name(),command.get_args()) != 0){
+        cout << "shell: command not found: " << command.name << endl;
+        return;
+    }   
 }
+
 #endif 

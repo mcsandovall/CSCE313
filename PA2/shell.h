@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <ctime>
+#include <curses.h>
 
 using namespace std;
 
@@ -30,15 +31,6 @@ string get_dateNtime(){
     return ctime(&now);
 }
 
-// function for testing pruposes
-void printVector(vector<string> cmd){
-    for(int i =0; i < cmd.size();++i){
-        cout << cmd[i] << " ";
-    }
-    cout << endl;
-}
-
-// user prompt
 void printPrompt(){
     cout << "######################################" << endl;
     cout << "######################################" << endl;
@@ -50,107 +42,202 @@ void printPrompt(){
     cout << "Welcome " << get_username() << " Time and Date: " << get_dateNtime() << endl;
 }
 
-//requirement 1 check for quotes single and double 
-void parseQuotes(string input, vector<string> &cmd){
-    bool singleQuote = (input.find("\'") != -1);
-    bool doubleQuote = (input.find("\"") != -1);
+class Command{
+    private:
+        void structure(vector<string> args){ // this will be called every time there is an insertion
+            if(args[0] == "cd"){
+                chdrStructure(args);
+                return;
+            }
+            // check for io redirection and background process
+            this->name = args[0];
+            for(int i = args.size()-1; i > 0;--i){
+                if(args[i] == ">"){ // output
+                    this->filename[STDOUT_FILENO] = args[i+1];
+                    args.pop_back();
+                    this->redirect[STDOUT_FILENO] = STDOUT_FILENO; // to trigger the flag
+                    args.pop_back();
+                }
 
-    // base case
-    if(!singleQuote && !doubleQuote){
-        cmd.push_back(input);
-        return; // end no quotes
+                if(args[i] == "<"){ // input
+                    this->filename[STDIN_FILENO] = args[i+1];
+                    args.pop_back();
+                    this->redirect[STDIN_FILENO] = STDIN_FILENO;
+                    args.pop_back();
+                }
+
+                if(args[i] == "&"){ // backgorund process
+                    this->backgroundProcess = true;
+                    args.pop_back();
+                }
+            }
+            this->args = args;
+        }
+
+        void chdrStructure(vector<string> args){
+            // put the filename in the STDOUT file
+            this->name = args[0];
+            this->filename[STDOUT_FILENO] = args[1];
+            args.pop_back();
+            this->args = args;
+        }   
+    public:
+        string name; // main cmd for the program
+        int redirect[2] = {-1,-1}; // -1 for no redirects[0]: FILEIN [1]: FILEOUT
+        vector<string> args; // arguments for the program
+        bool backgroundProcess;// check if it is a backgorund process
+        string filename[2]; // name of the file input and output for multiple implementation
+
+        Command();
+
+        // make a simple command
+        Command(vector<string> args){
+            structure(args);
+        }
+
+        const char* get_name(){
+            return name.c_str();
+        }
+
+        char** get_args(){ // convert into a char **
+            const char** arguments = new const char*[args.size() + 1];
+            for (int i = 0; i < args.size() ; ++i){
+                arguments[i] = args[i].c_str();
+            }
+            arguments[args.size()] = NULL; // make the end null
+            return (char**) arguments;
+        }
+};
+
+class pipeline_commands{
+    public:
+        int size; // the total number of commands
+        vector<Command> cmds; // the commands
+
+        pipeline_commands(){
+            this->size = cmds.size();
+        }
+
+        pipeline_commands(string inputline){ // split function but handles the quotes
+            vector<Command> commands;
+            vector<string> cmd;
+            string token;
+            int pos = 0;
+            bool removeLast = false;
+            for (int i = 0; i <= inputline.size(); ++i){
+                if(inputline[i] == '\''){
+                    pos = i+1;
+                    i += (inputline.substr(pos).find("\'")+1);
+                    removeLast = true;
+                }
+
+                if(inputline[i] == '\"'){
+                    pos = i+1;
+                    i += (inputline.substr(pos).find("\"")+1);
+                    removeLast = true;
+                }
+
+                if(inputline[i] == ' ' || i >= inputline.size()){
+                    token = inputline.substr(pos,i-pos);
+                    if(removeLast){
+                        token = token.substr(0,token.size()-1);
+                        removeLast = false;
+                    }
+                    cmd.push_back(token);
+                    pos = i+1; // get the pos after the command
+                }
+
+                // parse by pipes 
+                if(inputline[i] == '|' || i >= inputline.size()){
+                    Command new_command(cmd);
+                    commands.push_back(new_command);
+                    cmd.clear();
+                    i += 2;
+                    pos = i;
+                }
+                
+            }
+            this->cmds = commands;
+            this->size = commands.size();
+        }
+};
+
+void printCommand(Command cmd){ // for testing purposes
+    cout << "Program Name: " << cmd.name << endl;
+    for (int i = 0; i < cmd.args.size();++i){
+        cout << "args[" << i << "]: " << cmd.args[i] << " "; 
+    }
+    cout << endl;
+    cout << "File name: [<]:" << cmd.filename[STDIN_FILENO] << " [>]:" << cmd.filename[STDOUT_FILENO] << endl;
+    cout << "Redirect: " << "<: " << cmd.redirect[STDIN_FILENO] << " >: " << cmd.redirect[STDOUT_FILENO] << endl;
+}
+
+void print_pipeCmds(pipeline_commands comds){ // for testing
+    for (int i = 0; i < comds.size ; ++i){
+        printCommand(comds.cmds[i]);
+    }
+}
+vector<string> directories; // for the previous command
+
+int exec_chdr(Command cmd){
+    string filepath;
+    directories.push_back(get_directory());
+    if(cmd.filename[STDOUT_FILENO].empty()){
+        cout << "cd: no such file or directory: " + cmd.filename[STDOUT_FILENO] << endl;
+        exit(EXIT_FAILURE);
+    }
+    if(cmd.filename[STDOUT_FILENO] == "-"){ // for the previous directory
+        directories.pop_back(); // get rid of the current one
+        filepath = directories.back(); // get the last one 
+        directories.pop_back(); // get rid of it 
+        return chdir(filepath.c_str());
+    }
+    // for all cd commands I will use the STDOUT fileaname
+    if(cmd.filename[STDOUT_FILENO] == ".."){
+        return chdir(cmd.filename[STDOUT_FILENO].c_str());
+    }
+    // get the current working directory and add the filename
+    if(cmd.filename[STDOUT_FILENO][0] == '/'){
+        filepath = cmd.filename[STDOUT_FILENO];
+    }else{
+        filepath = get_directory() + "/" + cmd.filename[STDOUT_FILENO];
+    }
+    // filepath = get_directory() + "/" + cmd.filename[STDOUT_FILENO];
+    if(chdir(filepath.c_str()) != 0){
+        cout << "cd: no such file or directory: " + cmd.filename[STDOUT_FILENO] << endl;
+        exit(EXIT_FAILURE);
+    }
+    return 0; // the state in which the file exits
+}
+
+void exec_redir(Command command){
+    int fd[2];
+    string filepath = get_directory() + "/";
+    if(command.redirect[STDIN_FILENO] != -1){ // standard input <
+        filepath += command.filename[STDIN_FILENO];
+        fd[STDIN_FILENO] = open(filepath.c_str(), O_RDONLY); // open for read only
+        dup2(fd[STDIN_FILENO], STDIN_FILENO);
+    }
+    if(command.redirect[STDOUT_FILENO] != -1){ // standard output >
+        filepath = command.filename[STDOUT_FILENO];
+        fd[STDOUT_FILENO] = open(filepath.c_str(), O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR); // open with privileges to make files
+        dup2(fd[STDOUT_FILENO], STDOUT_FILENO);
+    }
+    execvp(command.get_name(),command.get_args());
+    close(fd[STDIN_FILENO]); // close the input redirection
+}
+
+void execute(Command command){
+
+    if(command.redirect[STDOUT_FILENO] != -1 || command.redirect[STDIN_FILENO] != -1){
+        exec_redir(command);
+        return;
     }
 
-    if(singleQuote && !doubleQuote){
-        string str = input.substr(0,input.find("\'"));
-        cmd.push_back(str);
-        input = input.substr(input.find("\'")+1);
-        parseQuotes(input,cmd);
-    }
-
-    if(!singleQuote && doubleQuote){
-        string str = input.substr(0,input.find("\""));
-        cmd.push_back(str);
-        input = input.substr(input.find("\"")+1);
-        parseQuotes(input,cmd);
+    if(execvp(command.get_name(),command.get_args()) != 0){ // execute command
+        cout << "shell: command not found: " << command.name << endl;
+        return;
     }   
 }
 
-// make an object to hold the commands and the filename if there is any
-
-
-int parsePipe(string input, vector<string> &commands){
-    // get all the pipes 
-    int pos = input.find("|");
-    if(pos == -1){ // there is no pipes
-        commands.push_back(input);
-        return 0; // status no pipe
-    }else{ // there is a pipe
-        string line;
-        while(pos != -1){ // process while there is a stilla pipe
-            line = input.substr(0,pos);
-            commands.push_back(line); // add the line to commands
-            input = input.substr(pos+1); // get everything after the pipe
-            pos = input.find("|");
-        }
-        commands.push_back(input); // add the last commands to the vector of commands
-        return 1; // status 1 for there is pipes
-    }
-}
-
-
-int caseIORedirect(string command){
-    // check to see what type of io redirect do you have 
-    bool inputExist = (command.find(">") != -1);
-    bool outputExist = (command.find("<") != -1);
-
-    if(!inputExist && !outputExist){
-        return 0; // no io redirection
-    }
-    if(!inputExist && outputExist){
-        return 1; // output redirection
-    }
-    if(inputExist && !outputExist){
-        return 2; // input redirection
-    }
-    if(inputExist && outputExist){
-        return 3; // both input and output redirection
-    }
-    return -1; // error neither of those worked 
-}
-// parse the input string and return the char** for the execution
-char** pareseString(string input){
-    if(input == "exit" || input.size() == 0){
-        cout << "Bye!! End of Shell" << endl;
-        exit(EXIT_SUCCESS);
-    }
-    stringstream ss(input);
-    vector<string> str;
-    string line;
-    while(ss >> line){
-        str.push_back(line);
-    }
-    const char** args = new const char* [str.size()+2];
-    for(int i = 0; i < str.size();++i){
-        args[i] =  str[i].c_str();
-    }
-    args[str.size()+1] = NULL;
-    return (char**) args;
-}
-
-// run the Parsed Commands 
-void runCommand(char** ParsedCommands){
-    int pid = fork();
-
-    if(pid == 0){
-        execvp(ParsedCommands[0],ParsedCommands);
-        exit(0);
-    }else{
-        waitpid(pid, 0, 0);
-        return;
-    }
-}
-
-
-
-#endif // SHELL_H
+#endif 

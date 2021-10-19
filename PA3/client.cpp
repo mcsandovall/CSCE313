@@ -112,7 +112,7 @@ void gethousandredRecords(string filename, int patient){
 	double time = 0; // from file time increase by 0.04
 	double read;
 	cout << "Process Started ..." << endl;
-	while ( time < 59.996){
+	while ( time < 40.000){ // last time is 59.996
 		ofs << time << ",";
 
 		DataRequest d1 = DataRequest(patient, time, 1);
@@ -145,6 +145,64 @@ void gethousandredRecords(string filename, int patient){
 	double requestTime = end.tv_sec - start.tv_sec;
 
 	cout << "Process Ended, Time taken for 1000 request: " << requestTime << endl;
+
+	// closing the channel    
+    Request q (QUIT_REQ_TYPE);
+    chan.cwrite (&q, sizeof (Request));
+	// client waiting for the server process, which is the child, to terminate
+	wait(0);
+	cout << "Client process exited" << endl;
+}
+
+void RequestFile(string filename){
+	int pid = fork ();
+	if (pid < 0){
+		EXITONERROR ("Could not create a child process for running the server");
+	}
+	if (!pid){ // The server runs in the child process
+		char* args[] = {"./server", nullptr};
+		if (execvp(args[0], args) < 0){
+			EXITONERROR ("Could not launch the server");
+		}
+	}
+
+	FIFORequestChannel chan ("control", FIFORequestChannel::CLIENT_SIDE);
+
+	FileRequest fm (0,0);
+	int len = sizeof (FileRequest) + filename.size()+1;
+	char buf [len];
+	memcpy (buf, &fm, sizeof (FileRequest));
+	strcpy (buf + sizeof (FileRequest), filename.c_str());
+	chan.cwrite (buf, len);  
+	int64 filelen;
+	chan.cread (&filelen, sizeof(int64));
+	if (isValidResponse(&filelen)){
+		cout << "File length is: " << filelen << " bytes" << endl;
+	}
+
+	// start the time for the file transfer 
+	struct timeval start, end;
+	gettimeofday(&start,NULL);
+
+	FILE *file = fopen(filename.c_str(),"wb");
+	cout << "File transfer started ..." << endl;
+
+	for(int i = 0; i < filelen;i += MAX_MESSAGE){
+		FileRequest f (i, MAX_MESSAGE);
+		memcpy (buf, &f, sizeof (FileRequest));
+		strcpy (buf + sizeof (FileRequest), filename.c_str());
+		chan.cwrite (buf, len);
+
+		int64 *cont =  new int64;
+		chan.cread(&cont, sizeof(int64));
+		fwrite(cont,sizeof(int64), sizeof(cont), file);
+	}
+	fclose(file);
+
+	// get the end time after the file trasfer
+	gettimeofday(&end,NULL);
+	double requestTime = end.tv_sec - start.tv_sec;
+	cout << "File transfer ended, Time taken: " << requestTime << endl;
 
 	// closing the channel    
     Request q (QUIT_REQ_TYPE);

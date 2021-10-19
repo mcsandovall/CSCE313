@@ -4,6 +4,8 @@
 using namespace std;
 
 void gethousandredRecords(string filename, int patient);
+void RequestFile(string filename);
+string RequestNewChannel();
 
 int main(int argc, char *argv[]){
 	int opt;
@@ -13,12 +15,13 @@ int main(int argc, char *argv[]){
 	string testfilename = "";
 	string filename = "";
 	// take all the arguments first because some of these may go to the server
-	while ((opt = getopt(argc, argv, "f:p:t:e:h:")) != -1) {
+	while ((opt = getopt(argc, argv, "f:p:t:e:h:c")) != -1) {
 
 		switch (opt) {
 			case 'f':
 				filename = optarg;
-				break;
+				RequestFile(filename);
+				exit(0);
 			case 'p': // this is the person number
 				p = atoi(optarg);
 				break;
@@ -33,6 +36,8 @@ int main(int argc, char *argv[]){
 				gethousandredRecords(testfilename, p);
 				exit(0); // after
 			case 'c': // requesting a new channel
+				cout << "This is the new channel name: " <<  RequestNewChannel() << endl;
+				exit(0);
 				break;
 			case 'm': // this is to change the buffer size 
 				break;
@@ -183,19 +188,22 @@ void RequestFile(string filename){
 	// start the time for the file transfer 
 	struct timeval start, end;
 	gettimeofday(&start,NULL);
-
 	FILE *file = fopen(filename.c_str(),"wb");
 	cout << "File transfer started ..." << endl;
 
 	for(int i = 0; i < filelen;i += MAX_MESSAGE){
-		FileRequest f (i, MAX_MESSAGE);
-		memcpy (buf, &f, sizeof (FileRequest));
+		FileRequest f2 (i,MAX_MESSAGE);
+		int len = sizeof (FileRequest) + filename.size()+1;
+		char buf [len];
+		memcpy (buf, &f2, sizeof (FileRequest));
 		strcpy (buf + sizeof (FileRequest), filename.c_str());
-		chan.cwrite (buf, len);
+		chan.cwrite (buf, len); 
 
-		int64 *cont =  new int64;
-		chan.cread(&cont, sizeof(int64));
-		fwrite(cont,sizeof(int64), sizeof(cont), file);
+		// string cont;
+		// chan.cread(&cont,sizeof(string));
+		// if(isValidResponse(&cont)){
+		// 	fwrite(cont.c_str(),sizeof(string),sizeof(cont),file);
+		// }
 	}
 	fclose(file);
 
@@ -210,4 +218,15 @@ void RequestFile(string filename){
 	// client waiting for the server process, which is the child, to terminate
 	wait(0);
 	cout << "Client process exited" << endl;
+}
+
+string RequestNewChannel(){
+	Request newChan(NEWCHAN_REQ_TYPE); // make a new request
+	FIFORequestChannel chan ("control", FIFORequestChannel::CLIENT_SIDE); // get the channel for the request
+	chan.cwrite(&newChan, sizeof(Request));
+	// get the return name of the new channel 
+	string newName;
+	chan.cread(&newName, sizeof(string));
+	cout << newName << endl;
+	return newName;
 }

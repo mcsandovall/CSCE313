@@ -3,18 +3,38 @@
 #include <sys/wait.h>
 using namespace std;
 
-int main(int argc, char *argv[]){
+void gethousandredRecords(string filename, int patient);
 
+int main(int argc, char *argv[]){
 	int opt;
 	int p = 1;
 	double t = 0.0;
 	int e = 1;
+	string testfilename = "";
 	string filename = "";
 	// take all the arguments first because some of these may go to the server
-	while ((opt = getopt(argc, argv, "f:")) != -1) {
+	while ((opt = getopt(argc, argv, "f:p:t:e:h:")) != -1) {
+
 		switch (opt) {
 			case 'f':
 				filename = optarg;
+				break;
+			case 'p': // this is the person number
+				p = atoi(optarg);
+				break;
+			case 't': // this is for the time
+				t = atof(optarg);
+				break;
+			case 'e': // this is the ecg number 
+				e = atoi(optarg);
+				break;
+			case 'h':// i will use this as the case for the 100 request
+				testfilename = optarg;
+				gethousandredRecords(testfilename, p);
+				exit(0); // after
+			case 'c': // requesting a new channel
+				break;
+			case 'm': // this is to change the buffer size 
 				break;
 		}
 	}
@@ -63,4 +83,73 @@ int main(int argc, char *argv[]){
 	wait(0);
 	cout << "Client process exited" << endl;
 
+}
+
+void gethousandredRecords(string filename, int patient){
+	int pid = fork ();
+	if (pid < 0){
+		EXITONERROR ("Could not create a child process for running the server");
+	}
+	if (!pid){ // The server runs in the child process
+		char* args[] = {"./server", nullptr};
+		if (execvp(args[0], args) < 0){
+			EXITONERROR ("Could not launch the server");
+		}
+	}
+	// create the channel for the request
+	FIFORequestChannel chan ("control", FIFORequestChannel::CLIENT_SIDE);
+
+	struct timeval start, end;
+	gettimeofday(&start, NULL);
+
+	// open the file 
+	ofstream ofs("received/"+filename);
+	if(!ofs.is_open()){
+		throw invalid_argument("File could not open" + filename);
+		return;
+	}
+
+	double time = 0; // from file time increase by 0.04
+	double read;
+	cout << "Process Started ..." << endl;
+	while ( time < 59.996){
+		ofs << time << ",";
+
+		DataRequest d1 = DataRequest(patient, time, 1);
+		DataRequest d2 = DataRequest(patient, time, 2);
+
+		char * buffer1 = new char[sizeof(double)]; // size of the reply
+		char * buffer2 = new char[sizeof(double)];
+
+		// send the request for the data 
+		chan.cwrite(&d1, sizeof(DataRequest));
+		chan.cread(&read, sizeof(double));
+
+		if (isValidResponse(&read)){
+			ofs << read << ",";
+		}
+
+		chan.cwrite(&d2, sizeof(DataRequest));
+		chan.cread(&read, sizeof(double));
+
+		if (isValidResponse(&read)){
+			ofs << read << "\n";
+		}
+		time += 0.04;
+	}
+	ofs.close();
+
+	// after all the request are sent and recieved get the time
+	gettimeofday(&end,NULL);
+
+	double requestTime = end.tv_sec - start.tv_sec;
+
+	cout << "Process Ended, Time taken for 1000 request: " << requestTime << endl;
+
+	// closing the channel    
+    Request q (QUIT_REQ_TYPE);
+    chan.cwrite (&q, sizeof (Request));
+	// client waiting for the server process, which is the child, to terminate
+	wait(0);
+	cout << "Client process exited" << endl;
 }

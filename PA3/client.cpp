@@ -7,6 +7,8 @@ void gethousandredRecords(string filename, int patient);
 string charToString(char array[]);
 void fileTransfer(string filename, int buffercapacity);
 
+vector<FIFORequestChannel*> OpenChannel; // this is to be used across all the process to stop the right channel
+
 int main(int argc, char *argv[]){
 
 	int opt;
@@ -17,7 +19,6 @@ int main(int argc, char *argv[]){
 	bool thousandRequest = false;
 	bool filetransfer = false;
 	bool requestChan = false;
-	vector<FIFORequestChannel*> OpenChannel;
 	string Tfile = "";
 	string filename = "";
 	// take all the arguments first because some of these may go to the server
@@ -49,12 +50,6 @@ int main(int argc, char *argv[]){
 		}
 	}
 
-	// Request for thousand Data Points - --- - - - - - - - -- - -
-	if(thousandRequest){
-		gethousandredRecords(Tfile,p);
-		exit(0);
-	}
-
 	int pid = fork ();
 	if (pid < 0){
 		EXITONERROR ("Could not create a child process for running the server");
@@ -66,12 +61,9 @@ int main(int argc, char *argv[]){
 		}
 	}
 
-	if(filetransfer){
-		fileTransfer(filename,bufferSize);
-	}
-
 	// make a new channel 
 	OpenChannel.push_back(new FIFORequestChannel("control",FIFORequestChannel::CLIENT_SIDE));
+
 	//FIFORequestChannel chan ("control", FIFORequestChannel::CLIENT_SIDE);
 	if(requestChan){ // Request new channel 
 		Request rq (NEWCHAN_REQ_TYPE);
@@ -79,6 +71,16 @@ int main(int argc, char *argv[]){
 		char buffer[30];
 		OpenChannel.back()->cread(&buffer, sizeof(buffer));
 		OpenChannel.push_back(new FIFORequestChannel(buffer,FIFORequestChannel::CLIENT_SIDE));
+	}
+
+	// Request for thousand Data Points - --- - - - - - - - -- - -
+	if(thousandRequest){
+		gethousandredRecords(Tfile,p);
+	}
+
+	// File Transfer Request
+	if(filetransfer){
+		fileTransfer(filename,bufferSize);
 	}
 
 	DataRequest d (p, t, e);
@@ -103,18 +105,6 @@ int main(int argc, char *argv[]){
 }
 
 void gethousandredRecords(string filename, int patient){
-	int pid = fork ();
-	if (pid < 0){
-		EXITONERROR ("Could not create a child process for running the server");
-	}
-	if (!pid){ // The server runs in the child process
-		char* args[] = {"./server", nullptr};
-		if (execvp(args[0], args) < 0){
-			EXITONERROR ("Could not launch the server");
-		}
-	}
-	// create the channel for the request
-	FIFORequestChannel chan ("control", FIFORequestChannel::CLIENT_SIDE);
 	struct timeval start, end;
 	gettimeofday(&start, NULL);
 
@@ -138,15 +128,15 @@ void gethousandredRecords(string filename, int patient){
 		char * buffer2 = new char[sizeof(double)];
 
 		// send the request for the data 
-		chan.cwrite(&d1, sizeof(DataRequest));
-		chan.cread(&read, sizeof(double));
+		OpenChannel.back()->cwrite(&d1, sizeof(DataRequest));
+		OpenChannel.back()->cread(&read, sizeof(double));
 
 		if (isValidResponse(&read)){
 			ofs << read << ",";
 		}
 
-		chan.cwrite(&d2, sizeof(DataRequest));
-		chan.cread(&read, sizeof(double));
+		OpenChannel.back()->cwrite(&d2, sizeof(DataRequest));
+		OpenChannel.back()->cread(&read, sizeof(double));
 
 		if (isValidResponse(&read)){
 			ofs << read << "\n";
@@ -161,13 +151,6 @@ void gethousandredRecords(string filename, int patient){
 	double requestTime = end.tv_sec - start.tv_sec;
 
 	cout << "Process Ended, Time taken for 1000 request: " << requestTime << endl;
-
-	// closing the channel    
-    Request q (QUIT_REQ_TYPE);
-    chan.cwrite (&q, sizeof (Request));
-	// client waiting for the server process, which is the child, to terminate
-	wait(0);
-	cout << "Client process exited" << endl;
 }
 
 string charToString(char array[]){

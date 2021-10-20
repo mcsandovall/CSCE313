@@ -4,44 +4,55 @@
 using namespace std;
 
 void gethousandredRecords(string filename, int patient);
-void RequestFile(string filename);
-string RequestNewChannel();
+string charToString(char array[]);
+void fileTransfer(string filename, int buffercapacity);
 
 int main(int argc, char *argv[]){
+
 	int opt;
+	int bufferSize = MAX_MESSAGE;
 	int p = 1;
 	double t = 0.0;
 	int e = 1;
-	string testfilename = "";
+	bool thousandRequest = false;
+	bool filetransfer = false;
+	bool requestChan = false;
+	vector<FIFORequestChannel*> OpenChannel;
+	string Tfile = "";
 	string filename = "";
 	// take all the arguments first because some of these may go to the server
-	while ((opt = getopt(argc, argv, "f:p:t:e:h:c")) != -1) {
-
+	while ((opt = getopt(argc, argv, "f:p:t:e:h:cm:")) != -1) {
 		switch (opt) {
 			case 'f':
 				filename = optarg;
-				RequestFile(filename);
-				exit(0);
-			case 'p': // this is the person number
+				filetransfer = true;
+				break;
+			case 'p':
 				p = atoi(optarg);
 				break;
-			case 't': // this is for the time
+			case 't':
 				t = atof(optarg);
 				break;
-			case 'e': // this is the ecg number 
+			case 'e':
 				e = atoi(optarg);
 				break;
-			case 'h':// i will use this as the case for the 100 request
-				testfilename = optarg;
-				gethousandredRecords(testfilename, p);
-				exit(0); // after
-			case 'c': // requesting a new channel
-				cout << "This is the new channel name: " <<  RequestNewChannel() << endl;
-				exit(0);
+			case 'h':
+				thousandRequest = true;
+				Tfile = optarg;
 				break;
-			case 'm': // this is to change the buffer size 
+			case 'c':
+				requestChan = true;
+				break;
+			case 'm':
+				bufferSize = atoi(optarg);
 				break;
 		}
+	}
+
+	// Request for thousand Data Points - --- - - - - - - - -- - -
+	if(thousandRequest){
+		gethousandredRecords(Tfile,p);
+		exit(0);
 	}
 
 	int pid = fork ();
@@ -54,8 +65,15 @@ int main(int argc, char *argv[]){
 			EXITONERROR ("Could not launch the server");
 		}
 	}
+
+	if(filetransfer){
+		fileTransfer(filename,bufferSize);
+	}
+
 	FIFORequestChannel chan ("control", FIFORequestChannel::CLIENT_SIDE);
+
 	DataRequest d (p, t, e);
+
 	chan.cwrite (&d, sizeof (DataRequest)); // question
 	double reply;
 	chan.cread (&reply, sizeof(double)); //answer
@@ -68,21 +86,24 @@ int main(int argc, char *argv[]){
 	you have to obtain the entire file over multiple requests 
 	(i.e., due to buffer space limitation) and assemble it
 	such that it is identical to the original*/
-	FileRequest fm (0,0);
-	int len = sizeof (FileRequest) + filename.size()+1;
-	char buf2 [len];
-	memcpy (buf2, &fm, sizeof (FileRequest));
-	strcpy (buf2 + sizeof (FileRequest), filename.c_str());
-	chan.cwrite (buf2, len);  
-	int64 filelen;
-	chan.cread (&filelen, sizeof(int64));
-	if (isValidResponse(&filelen)){
-		cout << "File length is: " << filelen << " bytes" << endl;
-	}
+	// FileRequest fm (0,0);
+	// int len = sizeof (FileRequest) + filename.size()+1;
+	// char buf2 [len];
+	// memcpy (buf2, &fm, sizeof (FileRequest));
+	// strcpy (buf2 + sizeof (FileRequest), filename.c_str());
+	// chan.cwrite (buf2, len);  
+	// int64 filelen;
+	// chan.cread (&filelen, sizeof(int64));
+	// if (isValidResponse(&filelen)){
+	// 	cout << "File length is: " << filelen << " bytes" << endl;
+	// }
 	
 	
 	// closing the channel    
     Request q (QUIT_REQ_TYPE);
+	// for(int i = 0; i < OpenChannel.size();++i){
+	// 	OpenChannel[i]->cwrite(&q, sizeof(Request));
+	// }
     chan.cwrite (&q, sizeof (Request));
 	// client waiting for the server process, which is the child, to terminate
 	wait(0);
@@ -103,7 +124,6 @@ void gethousandredRecords(string filename, int patient){
 	}
 	// create the channel for the request
 	FIFORequestChannel chan ("control", FIFORequestChannel::CLIENT_SIDE);
-
 	struct timeval start, end;
 	gettimeofday(&start, NULL);
 
@@ -159,74 +179,60 @@ void gethousandredRecords(string filename, int patient){
 	cout << "Client process exited" << endl;
 }
 
-void RequestFile(string filename){
-	int pid = fork ();
-	if (pid < 0){
-		EXITONERROR ("Could not create a child process for running the server");
+string charToString(char array[]){
+	int len =  sizeof(array) / sizeof(char);
+	string s;
+	for (int i = 0; i < len;++i){
+		s+= array[i];
 	}
-	if (!pid){ // The server runs in the child process
-		char* args[] = {"./server", nullptr};
-		if (execvp(args[0], args) < 0){
-			EXITONERROR ("Could not launch the server");
-		}
-	}
+	return s;
+}
 
+void fileTransfer(string filename, int buffercapacity){
+	// get the filesize
 	FIFORequestChannel chan ("control", FIFORequestChannel::CLIENT_SIDE);
 
 	FileRequest fm (0,0);
 	int len = sizeof (FileRequest) + filename.size()+1;
-	char buf [len];
-	memcpy (buf, &fm, sizeof (FileRequest));
-	strcpy (buf + sizeof (FileRequest), filename.c_str());
-	chan.cwrite (buf, len);  
+	char buf2 [len];
+	memcpy (buf2, &fm, sizeof (FileRequest));
+	strcpy (buf2 + sizeof (FileRequest), filename.c_str());
+	chan.cwrite (buf2, len);  
 	int64 filelen;
 	chan.cread (&filelen, sizeof(int64));
 	if (isValidResponse(&filelen)){
 		cout << "File length is: " << filelen << " bytes" << endl;
 	}
+	filename = filename;
 
-	// start the time for the file transfer 
 	struct timeval start, end;
 	gettimeofday(&start,NULL);
-	FILE *file = fopen(filename.c_str(),"wb");
-	cout << "File transfer started ..." << endl;
 
-	for(int i = 0; i < filelen;i += MAX_MESSAGE){
-		FileRequest f2 (i,MAX_MESSAGE);
-		int len = sizeof (FileRequest) + filename.size()+1;
-		char buf [len];
-		memcpy (buf, &f2, sizeof (FileRequest));
-		strcpy (buf + sizeof (FileRequest), filename.c_str());
-		chan.cwrite (buf, len); 
+	ofstream ofs("received/"+filename, fstream::binary);
+	int offset = 0;
+	
+	while (offset < filelen){
+		FileRequest fr(0,buffercapacity);
+		int package = sizeof(FileRequest) + filename.size() + 1;
+		char buff[package];
+		memcpy (buff, &fr, sizeof(FileRequest));
+		strcpy (buff  + sizeof(FileRequest), filename.c_str() + '\0');
+		chan.cwrite(buff,package);
 
-		// string cont;
-		// chan.cread(&cont,sizeof(string));
-		// if(isValidResponse(&cont)){
-		// 	fwrite(cont.c_str(),sizeof(string),sizeof(cont),file);
-		// }
+		char data[buffercapacity];
+		chan.cread(&data,buffercapacity);
+		ofs.write(data,buffercapacity);
+		offset += buffercapacity;
+		if(offset - package < buffercapacity){
+			buffercapacity = offset - package;
+		}
+		//cout << "Progress.. " << (ceil(offset/filelen))*100 <<"%" << endl;
 	}
-	fclose(file);
-
-	// get the end time after the file trasfer
+	ofs.close();
 	gettimeofday(&end,NULL);
-	double requestTime = end.tv_sec - start.tv_sec;
-	cout << "File transfer ended, Time taken: " << requestTime << endl;
-
-	// closing the channel    
-    Request q (QUIT_REQ_TYPE);
-    chan.cwrite (&q, sizeof (Request));
-	// client waiting for the server process, which is the child, to terminate
-	wait(0);
-	cout << "Client process exited" << endl;
+	double Processtime =  end.tv_sec - start.tv_sec;
+	cout << "File transfer finished time: " << Processtime << endl;
+	Request q (QUIT_REQ_TYPE);
+	chan.cwrite(&q, sizeof(Request));
 }
 
-string RequestNewChannel(){
-	Request newChan(NEWCHAN_REQ_TYPE); // make a new request
-	FIFORequestChannel chan ("control", FIFORequestChannel::CLIENT_SIDE); // get the channel for the request
-	chan.cwrite(&newChan, sizeof(Request));
-	// get the return name of the new channel 
-	string newName;
-	chan.cread(&newName, sizeof(string));
-	cout << newName << endl;
-	return newName;
-}

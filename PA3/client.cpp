@@ -70,45 +70,36 @@ int main(int argc, char *argv[]){
 		fileTransfer(filename,bufferSize);
 	}
 
-	FIFORequestChannel chan ("control", FIFORequestChannel::CLIENT_SIDE);
+	// make a new channel 
+	OpenChannel.push_back(new FIFORequestChannel("control",FIFORequestChannel::CLIENT_SIDE));
+	//FIFORequestChannel chan ("control", FIFORequestChannel::CLIENT_SIDE);
+	if(requestChan){ // Request new channel 
+		Request rq (NEWCHAN_REQ_TYPE);
+		OpenChannel.back()->cwrite(&rq, sizeof(Request));
+		char buffer[30];
+		OpenChannel.back()->cread(&buffer, sizeof(buffer));
+		OpenChannel.push_back(new FIFORequestChannel(buffer,FIFORequestChannel::CLIENT_SIDE));
+	}
 
 	DataRequest d (p, t, e);
 
-	chan.cwrite (&d, sizeof (DataRequest)); // question
+	OpenChannel.back()->cwrite (&d, sizeof (DataRequest)); // question
 	double reply;
-	chan.cread (&reply, sizeof(double)); //answer
+	OpenChannel.back()->cread (&reply, sizeof(double)); //answer
 	if (isValidResponse(&reply)){
 		cout << "For person " << p <<", at time " << t << ", the value of ecg "<< e <<" is " << reply << endl;
 	}
-
-	
-	/* this section shows how to get the length of a file
-	you have to obtain the entire file over multiple requests 
-	(i.e., due to buffer space limitation) and assemble it
-	such that it is identical to the original*/
-	// FileRequest fm (0,0);
-	// int len = sizeof (FileRequest) + filename.size()+1;
-	// char buf2 [len];
-	// memcpy (buf2, &fm, sizeof (FileRequest));
-	// strcpy (buf2 + sizeof (FileRequest), filename.c_str());
-	// chan.cwrite (buf2, len);  
-	// int64 filelen;
-	// chan.cread (&filelen, sizeof(int64));
-	// if (isValidResponse(&filelen)){
-	// 	cout << "File length is: " << filelen << " bytes" << endl;
-	// }
-	
 	
 	// closing the channel    
     Request q (QUIT_REQ_TYPE);
-	// for(int i = 0; i < OpenChannel.size();++i){
-	// 	OpenChannel[i]->cwrite(&q, sizeof(Request));
-	// }
-    chan.cwrite (&q, sizeof (Request));
+	//close all the request from all the channels 
+	for(int i =0; i < OpenChannel.size();++i){
+		OpenChannel.back()->cwrite(&q, sizeof(Request));
+		OpenChannel.pop_back();
+	}
 	// client waiting for the server process, which is the child, to terminate
 	wait(0);
 	cout << "Client process exited" << endl;
-
 }
 
 void gethousandredRecords(string filename, int patient){
@@ -197,7 +188,7 @@ void fileTransfer(string filename, int buffercapacity){
 	char buf2 [len];
 	memcpy (buf2, &fm, sizeof (FileRequest));
 	strcpy (buf2 + sizeof (FileRequest), filename.c_str());
-	chan.cwrite (buf2, len);  
+	chan.cwrite (&buf2, len);  
 	int64 filelen;
 	chan.cread (&filelen, sizeof(int64));
 	if (isValidResponse(&filelen)){

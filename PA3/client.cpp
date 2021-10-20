@@ -173,29 +173,21 @@ void fileTransfer(string filename, int buffercapacity){
 	struct timeval start, end;
 	gettimeofday(&start,NULL);
 
-	ofstream ofs("received/"+filename, fstream::binary);
-	int offset = 0;
-	
-	while (offset < filelen){
-		FileRequest fr(0,buffercapacity);
-		int package = sizeof(FileRequest) + filename.size() + 1;
-		char buff[package];
-		memcpy (buff, &fr, sizeof(FileRequest));
-		strcpy (buff  + sizeof(FileRequest), filename.c_str() + '\0');
-		OpenChannel.back()->cwrite(buff,package);
-
-		char data[buffercapacity];
-		OpenChannel.back()->cread(&data,buffercapacity);
-		ofs.write(data,buffercapacity);
-		offset += buffercapacity;
-		if(offset - package < buffercapacity){
-			buffercapacity = offset - package;
-		}
-		//cout << "Progress.. " << (ceil(offset/filelen))*100 <<"%" << endl;
+	ofstream ofs("received/"+filename, ofstream::binary);
+	int64 rem  = filelen;
+	FileRequest * f = (FileRequest*) buf2;
+	char channleRecieven [buffercapacity];
+	while (rem > 0){
+		f->length = min(rem, (int64) buffercapacity);
+		OpenChannel.back()->cwrite(buf2,len);
+		OpenChannel.back()->cread(&channleRecieven,buffercapacity);
+		ofs.write(channleRecieven,f->length);
+		rem -= f->length;
+		f->offset += f->length;
 	}
+
 	ofs.close();
 	gettimeofday(&end,NULL);
 	double Processtime =  end.tv_sec - start.tv_sec;
 	cout << "File transfer finished time: " << Processtime << endl;
 }
-

@@ -4,7 +4,6 @@
 using namespace std;
 
 void gethousandredRecords(string filename, int patient);
-string charToString(char array[]);
 void fileTransfer(string filename, int buffercapacity);
 
 vector<FIFORequestChannel*> OpenChannel; // this is to be used across all the process to stop the right channel
@@ -94,10 +93,13 @@ int main(int argc, char *argv[]){
 	
 	// closing the channel    
     Request q (QUIT_REQ_TYPE);
-	//close all the request from all the channels 
-	for(int i =0; i < OpenChannel.size();++i){
-		OpenChannel.back()->cwrite(&q, sizeof(Request));
+	//close all the request from all the channels
+	cout << "This is the size of the vector: " << OpenChannel.size() << endl; 
+	for(int i = 0; i <= OpenChannel.size();++i){
+		FIFORequestChannel * chn = OpenChannel.back();
 		OpenChannel.pop_back();
+		chn->cwrite(&q, sizeof(Request));
+		delete chn;
 	}
 	// client waiting for the server process, which is the child, to terminate
 	wait(0);
@@ -153,27 +155,16 @@ void gethousandredRecords(string filename, int patient){
 	cout << "Process Ended, Time taken for 1000 request: " << requestTime << endl;
 }
 
-string charToString(char array[]){
-	int len =  sizeof(array) / sizeof(char);
-	string s;
-	for (int i = 0; i < len;++i){
-		s+= array[i];
-	}
-	return s;
-}
-
 void fileTransfer(string filename, int buffercapacity){
-	// get the filesize
-	FIFORequestChannel chan ("control", FIFORequestChannel::CLIENT_SIDE);
-
+	// get filesize 
 	FileRequest fm (0,0);
 	int len = sizeof (FileRequest) + filename.size()+1;
 	char buf2 [len];
 	memcpy (buf2, &fm, sizeof (FileRequest));
 	strcpy (buf2 + sizeof (FileRequest), filename.c_str());
-	chan.cwrite (&buf2, len);  
+	OpenChannel.back()->cwrite (&buf2, len);  
 	int64 filelen;
-	chan.cread (&filelen, sizeof(int64));
+	OpenChannel.back()->cread (&filelen, sizeof(int64));
 	if (isValidResponse(&filelen)){
 		cout << "File length is: " << filelen << " bytes" << endl;
 	}
@@ -191,10 +182,10 @@ void fileTransfer(string filename, int buffercapacity){
 		char buff[package];
 		memcpy (buff, &fr, sizeof(FileRequest));
 		strcpy (buff  + sizeof(FileRequest), filename.c_str() + '\0');
-		chan.cwrite(buff,package);
+		OpenChannel.back()->cwrite(buff,package);
 
 		char data[buffercapacity];
-		chan.cread(&data,buffercapacity);
+		OpenChannel.back()->cread(&data,buffercapacity);
 		ofs.write(data,buffercapacity);
 		offset += buffercapacity;
 		if(offset - package < buffercapacity){
@@ -206,7 +197,5 @@ void fileTransfer(string filename, int buffercapacity){
 	gettimeofday(&end,NULL);
 	double Processtime =  end.tv_sec - start.tv_sec;
 	cout << "File transfer finished time: " << Processtime << endl;
-	Request q (QUIT_REQ_TYPE);
-	chan.cwrite(&q, sizeof(Request));
 }
 

@@ -94,7 +94,7 @@ int main(int argc, char *argv[]){
 	// closing the channel    
     Request q (QUIT_REQ_TYPE);
 	//close all the request from all the channels
-	cout << "This is the size of the vector: " << OpenChannel.size() << endl; 
+	cout << "Number of Open Channels: " << OpenChannel.size() << endl; 
 	for(int i = 0; i <= OpenChannel.size();++i){
 		FIFORequestChannel * chn = OpenChannel.back();
 		OpenChannel.pop_back();

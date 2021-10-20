@@ -120,7 +120,7 @@ void gethousandredRecords(string filename, int patient){
 	double time = 0; // from file time increase by 0.04
 	double read;
 	cout << "Process Started ..." << endl;
-	while ( time < 40.000){ // last time is 59.996
+	while ( time < 39.96){ // last time is 59.996
 		ofs << time << ",";
 
 		DataRequest d1 = DataRequest(patient, time, 1);
@@ -149,10 +149,13 @@ void gethousandredRecords(string filename, int patient){
 
 	// after all the request are sent and recieved get the time
 	gettimeofday(&end,NULL);
-
-	double requestTime = end.tv_sec - start.tv_sec;
-
-	cout << "Process Ended, Time taken for 1000 request: " << requestTime << endl;
+	long sec = end.tv_sec - start.tv_sec;
+	long musec = end.tv_sec - start.tv_sec; 
+	if(musec <0){
+		musec += (int)1e6;
+		sec--;
+	}
+	cout << "Process Ended. Time taken for 1000 request [Sec:" << sec <<",musec:" << musec <<"]" << endl;
 }
 
 void fileTransfer(string filename, int buffercapacity){
@@ -171,7 +174,7 @@ void fileTransfer(string filename, int buffercapacity){
 	filename = filename;
 
 	struct timeval start, end;
-	gettimeofday(&start,NULL);
+	gettimeofday(&start,0);
 
 	ofstream ofs("received/"+filename, ofstream::binary);
 	int64 rem  = filelen;
@@ -187,7 +190,12 @@ void fileTransfer(string filename, int buffercapacity){
 	}
 
 	ofs.close();
-	gettimeofday(&end,NULL);
-	double Processtime =  end.tv_sec - start.tv_sec;
-	cout << "File transfer finished time: " << Processtime << endl;
+	gettimeofday(&end,0);
+	long sec = end.tv_sec - start.tv_sec;
+	long musec = end.tv_usec - start.tv_usec; 
+	if(musec <0){
+		musec += (int)1e6;
+		sec--;
+	}
+	cout << "File transfer finished time [Sec:" << sec <<",musec:" << musec <<"]" << endl;
 }

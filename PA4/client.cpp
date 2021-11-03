@@ -9,15 +9,33 @@
 
 using namespace std;
 
-void createChannel(vector<FIFORequestChannel*> openChannels){
-	FIFORequestChannel * channel = openChannels.front();
-	Request rq (NEWCHAN_REQ_TYPE);
-	channel->cwrite(&rq, sizeof(Request));
+struct server_response{ // structure to hold the response data and patient number
+	double data;
+	int p;
+
+	server_response(){}
+	server_response(double d, int pno) : data(d), p(pno) {}
+};
+
+void makeFile_request(int64 filesize,int buffersize, FileRequest * file_request, BoundedBuffer * requestBuffer){
+	// this function makes all the file request and puts them in the request buffer
+	while(filesize > 0){
+		file_request->length = min<int64>(filesize, (int64) buffersize);
+		vector<char> request((char*) file_request, (char*) file_request + sizeof(FileRequest));
+		requestBuffer->push(request);
+		filesize -= file_request->length;
+		file_request->offset += file_request->length;
+	}
+}
+
+FIFORequestChannel * createChannel(FIFORequestChannel * channel){
+	// get a new request channel and return the pointer
+	Request rq(NEWCHAN_REQ_TYPE);
+	channel->cwrite(&rq,sizeof(Request));
 	char buffer [30];
 	channel->cread(&buffer, sizeof(buffer));
-	openChannels.push_back( new FIFORequestChannel (buffer, FIFORequestChannel::CLIENT_SIDE));
-	channel = nullptr;
-	delete channel;
+	FIFORequestChannel * new_channel = new FIFORequestChannel(buffer,FIFORequestChannel::CLIENT_SIDE);
+	return new_channel;
 }
 
 void patient_thread_function(int p, int n, BoundedBuffer * requestBuffer){
@@ -34,7 +52,7 @@ void patient_thread_function(int p, int n, BoundedBuffer * requestBuffer){
 	
 }
 
-void worker_thread_function(BoundedBuffer * requestBuffer,BoundedBuffer * responseBuffers, vector<FIFORequestChannel*> openChannels, int p){
+void worker_thread_function(BoundedBuffer * requestBuffer,BoundedBuffer * responseBuffers, FIFORequestChannel * channel, int buffersize){
     /*
 		Functionality of the worker threads	
 		pop from the request buffer 
@@ -43,43 +61,74 @@ void worker_thread_function(BoundedBuffer * requestBuffer,BoundedBuffer * respon
 		push the response into respose buffer
     */
    vector<char> request, response;
-   // create a channel 
-   createChannel(openChannels);
-   FIFORequestChannel * channel = openChannels.back(); // get the newest created channel
+   // create a channel
+   FIFORequestChannel * new_channel = createChannel(channel);
    double resp;
+   char buffer [buffersize];
 
    // cast a pointer of request type
-//    while(true){
+   while(true){
+	   // get the request from the request_buffer
+	   request = requestBuffer->pop();
 
-// 	   //check for the message type // vector of size datarquest 
-// 	   request = requestBuffer->pop();
-// 	   // make the request 
-// 	   DataRequest dr ( (int) request[0], (double) request[1], (int) request[2]);
-	   
-// 	   // send the request
-// 	   channel->cwrite(&dr, sizeof(DataRequest));
+	   // get the command from the vector
+	   char* command = request.data();
 
-// 	   // get the data
-// 	   channel->cread(&resp, sizeof(double));
+	   // get the command type
+	   REQUEST_TYPE_PREFIX * type = (REQUEST_TYPE_PREFIX*)command;
 
-// 	   // put it in the response buffer
-// 	   response.push_back((request[0])); // add the patient number with the reponse
-// 	   response.push_back( (char) resp);
+	   // check to see if the request type is an quit message type 
+	   if(*type == QUIT_REQ_TYPE){
+		   	// send the quit type to the server to quit the connection for that channel
+			new_channel->cwrite(command,sizeof(Request));
+			delete new_channel;
+			break;
+	   }
 
-// 	   responseBuffers->push(response);
-//    }
+	   if(*type == DATA_REQ_TYPE){
+		   // send the request, get the data and put it in the response buffer
+		   DataRequest * dr = (DataRequest*) command;
+		   new_channel->cwrite(dr, sizeof(DataRequest));
+		   new_channel->cread(&resp, sizeof(double));
+
+		   // put the request data into the response struct with the patient number
+		   server_response * s_r = new server_response(resp,dr->person);
+		   vector<char> data((char *)s_r, (char *)s_r + sizeof(server_response));
+
+		   // add it to the reponse buffer
+		   responseBuffers->push(data);
+
+		   //delete all the pointer to prevent memeory leak
+		   delete dr, s_r;
+	   }
+
+	   if(*type == FILE_REQ_TYPE){
+		   // send the request for the file and get it to work
+		   FileRequest * fr = (FileRequest*) command;
+		   channel->cwrite(fr,fr->length);
+	   }
+
+	   // delete the pointer to prevent memory leak
+	   delete command, type;
+   }
 
 }
-void histogram_thread_function (BoundedBuffer response_buffer, HistogramCollection hc){
+
+void histogram_thread_function (BoundedBuffer * response_buffer, HistogramCollection hc){
     /*
 		Functionality of the histogram threads	
+		h history for p patients
 		Histogram should check the response buffer and then added it to the historgram
     */
 
+   vector<char> response;
+   // pop once to determine the patient number to handle with this thread
+   int pno;
+
+	
 }
 
 int main(int argc, char *argv[]){
-	vector<FIFORequestChannel*> openChannels;
 	int opt;
 	int p = 1;
 	string filename = "";
@@ -126,21 +175,38 @@ int main(int argc, char *argv[]){
 		}
 	}
 	//make the control channel 
-	openChannels.push_back( new FIFORequestChannel( "control", FIFORequestChannel::CLIENT_SIDE));
+	FIFORequestChannel * channel = new FIFORequestChannel("control",FIFORequestChannel::CLIENT_SIDE);
 
+	// make a request buffer with the buffer size
 	BoundedBuffer request_buffer(b);
 
-	// also make the response buffers make the response buffers without the size
-	BoundedBuffer * respose_buffer = new BoundedBuffer[p];
-	for(int i = 0; i < p;++i){
-		respose_buffer[i] = BoundedBuffer(b);
-	}
+	// make a responde buffer 
+	BoundedBuffer response_buffer(b);
 
 	HistogramCollection hc;
 
-
 	struct timeval start, end;
     gettimeofday (&start, 0);
+
+	if(filename!= ""){ // this mean we have a file request
+		//query the size of the file
+		FileRequest fm (0,0);
+		int len = sizeof (FileRequest) + filename.size()+1;
+		char buf [len];
+		memcpy (buf, &fm, sizeof (FileRequest));
+		strcpy (buf + sizeof (FileRequest), filename.c_str());
+		channel->cwrite (&buf, len);  
+		int64 filelen;
+		channel->cread (&filelen, sizeof(int64));
+		if (isValidResponse(&filelen)){
+			cout << "File length is: " << filelen << " bytes" << endl;
+		}
+
+		// make a thread that makes and puts all the request into the request buffer
+		thread file_worker(makeFile_request,filelen, b , (FileRequest*) buf, &request_buffer);
+
+		file_worker.join();
+	}
 
     /* Start all threads here */
 	thread patients[p];
@@ -150,13 +216,33 @@ int main(int argc, char *argv[]){
 
 	thread workers[w];
 	for(int i = 0; i < w; ++i){
-		workers[i] = thread(worker_thread_function,)
+		workers[i] = thread(worker_thread_function,&request_buffer, &response_buffer, channel, b);
+	}
+
+	thread hist[h];
+	for(int i = 0; i < h;++i){
+		hist[i] = thread(histogram_thread_function,&response_buffer,hc);
 	}
 
 
 	/* Join all threads here */
 	for (int i = 0; i < p;++i){
 		patients[i].join();
+	}
+
+	for(int i = 0; i < w; ++i){
+		workers[i].join();
+	}
+
+	for(int i = 0; i < h;++i){
+		hist[i].join();
+	}
+
+	// kill the worker thread
+	for(int i  = 0; i < h; ++i){
+		Request q (QUIT_REQ_TYPE);
+		vector<char> rq ((char*) &q, (char*) &q  + sizeof(Request));
+		request_buffer.push(rq);
 	}
 	
 	
@@ -170,12 +256,9 @@ int main(int argc, char *argv[]){
 	
 	// close all the channels 
 	Request q (QUIT_REQ_TYPE);
-	for(int i = 0; i < openChannels.size();++i){
-		openChannels.back()->cwrite(&q, sizeof(Request));
-		openChannels.pop_back();
-	}
+	channel->cwrite(&q, sizeof(Request));
+	delete channel; // delete pointer to the channel
 
-	// delete the pointers to the threads
 
 	// client waiting for the server process, which is the child, to terminate
 	wait(0);

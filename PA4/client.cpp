@@ -52,7 +52,7 @@ void patient_thread_function(int p, int n, BoundedBuffer * requestBuffer){
 	
 }
 
-void worker_thread_function(BoundedBuffer * requestBuffer,BoundedBuffer * responseBuffers, FIFORequestChannel * channel, int buffersize){
+void worker_thread_function(BoundedBuffer * requestBuffer,BoundedBuffer * responseBuffers, FIFORequestChannel * channel, int buffersize, string filename){
     /*
 		Functionality of the worker threads	
 		pop from the request buffer 
@@ -65,6 +65,12 @@ void worker_thread_function(BoundedBuffer * requestBuffer,BoundedBuffer * respon
    FIFORequestChannel * new_channel = createChannel(channel);
    double resp;
    char buffer [buffersize];
+
+   ofstream ofs;
+
+   if(filename != ""){
+	   ofs.open("recieved/"+filename, ofstream::out | ofstream::binary);
+   }
 
    // cast a pointer of request type
    while(true){
@@ -81,7 +87,7 @@ void worker_thread_function(BoundedBuffer * requestBuffer,BoundedBuffer * respon
 	   if(*type == QUIT_REQ_TYPE){
 		   	// send the quit type to the server to quit the connection for that channel
 			new_channel->cwrite(command,sizeof(Request));
-			delete new_channel;
+			//delete new_channel;
 			break;
 	   }
 
@@ -99,22 +105,37 @@ void worker_thread_function(BoundedBuffer * requestBuffer,BoundedBuffer * respon
 		   responseBuffers->push(data);
 
 		   //delete all the pointer to prevent memeory leak
-		   delete dr, s_r;
 	   }
 
 	   if(*type == FILE_REQ_TYPE){
-		   // send the request for the file and get it to work
+		   // make the command of file request type
 		   FileRequest * fr = (FileRequest*) command;
-		   channel->cwrite(fr,fr->length);
+
+		   // send the request
+		   new_channel->cwrite(fr,fr->length);
+
+		   // get the request and put in the file
+		   new_channel->cread(&buffer,buffersize);
+		   ofs.write(buffer,fr->length);
+		   
+			// delete the pointer 
 	   }
 
 	   // delete the pointer to prevent memory leak
-	   delete command, type;
+	   //delete command, type;
    }
 
+   if(filename != ""){
+	   ofs.close();
+   }
+
+	Request q(QUIT_REQ_TYPE);
+	new_channel->cwrite(&q, sizeof(Request));
+
+	//delete new_channel;
 }
 
-void histogram_thread_function (BoundedBuffer * response_buffer, HistogramCollection hc){
+void histogram_thread_function (BoundedBuffer * response_buffer, HistogramCollection *hc){
     /*
 		Functionality of the histogram threads	
 		h history for p patients
@@ -122,10 +143,22 @@ void histogram_thread_function (BoundedBuffer * response_buffer, HistogramCollec
     */
 
    vector<char> response;
-   // pop once to determine the patient number to handle with this thread
-   int pno;
 
-	
+   while(true){;
+		// get the response 
+		response = response_buffer->pop();
+
+		// get the server_response structore
+		server_response rp = *(server_response*) response.data();
+
+		// break the loop if there is a negative value in the request
+		if(rp.p == -1 || rp.data == -1.0){
+			break;
+		}
+
+		// put it in the right histogram with according to the patient number
+		hc->update(rp.p,rp.data);
+   }
 }
 
 int main(int argc, char *argv[]){
@@ -169,9 +202,18 @@ int main(int argc, char *argv[]){
 		EXITONERROR ("Could not create a child process for running the server");
 	}
 	if (!pid){ // The server runs in the child process
-		char* args[] = {"./server", nullptr};
-		if (execvp(args[0], args) < 0){
-			EXITONERROR ("Could not launch the server");
+		// make another request for filerequest
+			if(filename != ""){ // its a filerequest
+			char* args[] = {"./server", "-m", (char*) m};
+			if (execvp(args[0], args) < 0){
+					EXITONERROR ("Could not launch the server");
+				}
+		}
+		else{
+			char* args[] = {"./server", nullptr};
+			if (execvp(args[0], args) < 0){
+				EXITONERROR ("Could not launch the server");
+			}
 		}
 	}
 	//make the control channel 
@@ -212,16 +254,19 @@ int main(int argc, char *argv[]){
 	thread patients[p];
 	for(int i = 0; i < p;++i){
 		patients[i] = thread(patient_thread_function,i+1,n,&request_buffer);
+		// create the number of histograms
+		Histogram * h = new Histogram(n,3.0,30.0);
+		hc.add(h);
 	}
 
 	thread workers[w];
 	for(int i = 0; i < w; ++i){
-		workers[i] = thread(worker_thread_function,&request_buffer, &response_buffer, channel, b);
+		workers[i] = thread(worker_thread_function,&request_buffer, &response_buffer, channel, b, filename);
 	}
 
 	thread hist[h];
 	for(int i = 0; i < h;++i){
-		hist[i] = thread(histogram_thread_function,&response_buffer,hc);
+		hist[i] = thread(histogram_thread_function,&response_buffer,&hc);
 	}
 
 
@@ -239,10 +284,17 @@ int main(int argc, char *argv[]){
 	}
 
 	// kill the worker thread
-	for(int i  = 0; i < h; ++i){
+	for(int i  = 0; i < w; ++i){
 		Request q (QUIT_REQ_TYPE);
 		vector<char> rq ((char*) &q, (char*) &q  + sizeof(Request));
 		request_buffer.push(rq);
+	}
+
+	// kill the histogram threads
+	for(int i = 0; i < h; ++i){
+		server_response qr(-1.0,-1);
+		vector<char> q ((char*) &qr, (char*) &qr + sizeof(server_response));
+		response_buffer.push(q);
 	}
 	
 	
@@ -257,7 +309,7 @@ int main(int argc, char *argv[]){
 	// close all the channels 
 	Request q (QUIT_REQ_TYPE);
 	channel->cwrite(&q, sizeof(Request));
-	delete channel; // delete pointer to the channel
+	//delete channel; // delete pointer to the channel
 
 
 	// client waiting for the server process, which is the child, to terminate

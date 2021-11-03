@@ -49,7 +49,7 @@ void patient_thread_function(int p, int n, BoundedBuffer * requestBuffer){
 		requestBuffer->push(request);
 		dt->seconds += 0.004;
 	}
-	
+	//delete dt;
 }
 
 void worker_thread_function(BoundedBuffer * requestBuffer,BoundedBuffer * responseBuffers, FIFORequestChannel * channel, int buffersize, string filename){
@@ -87,10 +87,9 @@ void worker_thread_function(BoundedBuffer * requestBuffer,BoundedBuffer * respon
 	   if(*type == QUIT_REQ_TYPE){
 		   	// send the quit type to the server to quit the connection for that channel
 			new_channel->cwrite(command,sizeof(Request));
-			//delete new_channel;
+			delete new_channel;
 			break;
 	   }
-
 	   if(*type == DATA_REQ_TYPE){
 		   // send the request, get the data and put it in the response buffer
 		   DataRequest * dr = (DataRequest*) command;
@@ -120,19 +119,11 @@ void worker_thread_function(BoundedBuffer * requestBuffer,BoundedBuffer * respon
 		   
 			// delete the pointer 
 	   }
-
-	   // delete the pointer to prevent memory leak
-	   //delete command, type;
    }
 
    if(filename != ""){
 	   ofs.close();
    }
-
-	Request q(QUIT_REQ_TYPE);
-	new_channel->cwrite(&q, sizeof(Request));
-
-	//delete new_channel;
 }
 
 void histogram_thread_function (BoundedBuffer * response_buffer, HistogramCollection *hc){
@@ -141,9 +132,7 @@ void histogram_thread_function (BoundedBuffer * response_buffer, HistogramCollec
 		h history for p patients
 		Histogram should check the response buffer and then added it to the historgram
     */
-
    vector<char> response;
-
    while(true){;
 		// get the response 
 		response = response_buffer->pop();
@@ -249,13 +238,13 @@ int main(int argc, char *argv[]){
 
 		file_worker.join();
 	}
-
+	cout << "Flag 1 " << endl;
     /* Start all threads here */
 	thread patients[p];
 	for(int i = 0; i < p;++i){
 		patients[i] = thread(patient_thread_function,i+1,n,&request_buffer);
 		// create the number of histograms
-		Histogram * h = new Histogram(n,3.0,30.0);
+		Histogram * h = new Histogram(10,-2.0,2.0);
 		hc.add(h);
 	}
 
@@ -269,18 +258,10 @@ int main(int argc, char *argv[]){
 		hist[i] = thread(histogram_thread_function,&response_buffer,&hc);
 	}
 
-
+	cout << "Flag 2" << endl;
 	/* Join all threads here */
 	for (int i = 0; i < p;++i){
 		patients[i].join();
-	}
-
-	for(int i = 0; i < w; ++i){
-		workers[i].join();
-	}
-
-	for(int i = 0; i < h;++i){
-		hist[i].join();
 	}
 
 	// kill the worker thread
@@ -290,18 +271,25 @@ int main(int argc, char *argv[]){
 		request_buffer.push(rq);
 	}
 
+	for(int i = 0; i < w; ++i){
+		workers[i].join();
+	}
+
 	// kill the histogram threads
 	for(int i = 0; i < h; ++i){
 		server_response qr(-1.0,-1);
 		vector<char> q ((char*) &qr, (char*) &qr + sizeof(server_response));
 		response_buffer.push(q);
 	}
-	
+
+	for(int i = 0; i < h;++i){
+		hist[i].join();
+	}
 	
     gettimeofday (&end, 0);
 
     // print the results and time difference
-	hc.print ();
+	//hc.print ();
     int secs = (end.tv_sec * 1e6 + end.tv_usec - start.tv_sec * 1e6 - start.tv_usec)/(int) 1e6;
     int usecs = (int)(end.tv_sec * 1e6 + end.tv_usec - start.tv_sec * 1e6 - start.tv_usec)%((int) 1e6);
     cout << "Took " << secs << " seconds and " << usecs << " micro seconds" << endl;

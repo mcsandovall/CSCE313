@@ -19,6 +19,12 @@ public:
     void add (Histogram* h){
         hists.push_back (h);
     }
+
+    // update function to update the histogram based on the index which is the patient number
+    void update(int pno, double value){
+        // patient numbers are 1 -15 so subtract 1 to get the index
+        hists[pno-1]->update(value);
+    }
     
     void print (){
         int nhists = hists.size();

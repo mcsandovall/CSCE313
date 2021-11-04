@@ -19,13 +19,16 @@ struct server_response{ // structure to hold the response data and patient numbe
 
 void makeFile_request(int64 filesize,int buffersize, FileRequest * file_request, BoundedBuffer * requestBuffer){
 	// this function makes all the file request and puts them in the request buffer
+	cout << "Start woker thread" << endl;
 	while(filesize > 0){
+		cout << filesize << endl;
 		file_request->length = min<int64>(filesize, (int64) buffersize);
 		vector<char> request((char*) file_request, (char*) file_request + sizeof(FileRequest));
 		requestBuffer->push(request);
 		filesize -= file_request->length;
 		file_request->offset += file_request->length;
 	}
+	cout << "end worker thread" << endl;
 }
 
 FIFORequestChannel * createChannel(FIFORequestChannel * channel){
@@ -48,6 +51,7 @@ void patient_thread_function(int p, int n, BoundedBuffer * requestBuffer){
 		vector<char> request((char *)dt, (char *)dt + sizeof(DataRequest));
 		requestBuffer->push(request);
 		dt->seconds += 0.004;
+		//cout << i << endl;
 	}
 	//delete dt;
 }
@@ -60,65 +64,57 @@ void worker_thread_function(BoundedBuffer * requestBuffer,BoundedBuffer * respon
 		recieve the request
 		push the response into respose buffer
     */
-   vector<char> request, response;
-   // create a channel
-   FIFORequestChannel * new_channel = createChannel(channel);
-   double resp;
-   char buffer [buffersize];
 
    ofstream ofs;
 
    if(filename != ""){
-	   ofs.open("recieved/"+filename, ofstream::out | ofstream::binary);
+	   ofs.open("recieved/"+ filename, ofstream::binary);
    }
 
    // cast a pointer of request type
    while(true){
-	   // get the request from the request_buffer
-	   request = requestBuffer->pop();
-
-	   // get the command from the vector
-	   char* command = request.data();
-
-	   // get the command type
-	   REQUEST_TYPE_PREFIX * type = (REQUEST_TYPE_PREFIX*)command;
-
-	   // check to see if the request type is an quit message type 
-	   if(*type == QUIT_REQ_TYPE){
+	   
+	   vector<char> req_v = requestBuffer->pop();
+	   char* command = req_v.data();
+	   REQUEST_TYPE_PREFIX type = *(REQUEST_TYPE_PREFIX*) command;
+	   
+	   if(type == QUIT_REQ_TYPE){
 		   	// send the quit type to the server to quit the connection for that channel
-			new_channel->cwrite(command,sizeof(Request));
-			delete new_channel;
+			Request q = *(Request*) command;
+			channel->cwrite(&q,sizeof(Request));
+			delete channel;
 			break;
 	   }
-	   if(*type == DATA_REQ_TYPE){
-		   // send the request, get the data and put it in the response buffer
-		   DataRequest * dr = (DataRequest*) command;
-		   new_channel->cwrite(dr, sizeof(DataRequest));
-		   new_channel->cread(&resp, sizeof(double));
+	   if(type == DATA_REQ_TYPE){
+		   DataRequest dr = *(DataRequest*) command;
 
+		   channel->cwrite(&dr, sizeof(DataRequest));
+		   double value;
+		   channel->cread(&value, sizeof(double));
+		 
 		   // put the request data into the response struct with the patient number
-		   server_response * s_r = new server_response(resp,dr->person);
+		   server_response * s_r = new server_response(value,dr.person);
 		   vector<char> data((char *)s_r, (char *)s_r + sizeof(server_response));
 
 		   // add it to the reponse buffer
 		   responseBuffers->push(data);
+		   //cout << "size of response buffer " << responseBuffers->size() << endl;
 
 		   //delete all the pointer to prevent memeory leak
 	   }
 
-	   if(*type == FILE_REQ_TYPE){
-		   // make the command of file request type
+		else if(type == FILE_REQ_TYPE){
 		   FileRequest * fr = (FileRequest*) command;
 
-		   // send the request
-		   new_channel->cwrite(fr,fr->length);
+		   const int size = sizeof(filename) + filename.size() + 1;
 
-		   // get the request and put in the file
-		   new_channel->cread(&buffer,buffersize);
-		   ofs.write(buffer,fr->length);
-		   
-			// delete the pointer 
-	   }
+		   channel->cwrite(command, size);
+		   char buffer[buffersize];
+		   channel->cread(&buffer,buffersize);
+
+		   ofs.seekp( fr->offset);
+		   ofs.write(buffer, fr->length);
+	    }
    }
 
    if(filename != ""){
@@ -133,7 +129,7 @@ void histogram_thread_function (BoundedBuffer * response_buffer, HistogramCollec
 		Histogram should check the response buffer and then added it to the historgram
     */
    vector<char> response;
-   while(true){;
+   while(true){
 		// get the response 
 		response = response_buffer->pop();
 
@@ -191,18 +187,9 @@ int main(int argc, char *argv[]){
 		EXITONERROR ("Could not create a child process for running the server");
 	}
 	if (!pid){ // The server runs in the child process
-		// make another request for filerequest
-			if(filename != ""){ // its a filerequest
-			char* args[] = {"./server", "-m", (char*) m};
-			if (execvp(args[0], args) < 0){
-					EXITONERROR ("Could not launch the server");
-				}
-		}
-		else{
-			char* args[] = {"./server", nullptr};
-			if (execvp(args[0], args) < 0){
-				EXITONERROR ("Could not launch the server");
-			}
+		char* args[] = {"./server", "-m", (char*) to_string(m).c_str() ,nullptr};
+		if (execvp(args[0], args) < 0){
+			EXITONERROR ("Could not launch the server");
 		}
 	}
 	//make the control channel 
@@ -234,11 +221,10 @@ int main(int argc, char *argv[]){
 		}
 
 		// make a thread that makes and puts all the request into the request buffer
-		thread file_worker(makeFile_request,filelen, b , (FileRequest*) buf, &request_buffer);
+		thread file_worker(makeFile_request,filelen, m , (FileRequest*) buf, &request_buffer);
 
 		file_worker.join();
 	}
-	cout << "Flag 1 " << endl;
     /* Start all threads here */
 	thread patients[p];
 	for(int i = 0; i < p;++i){
@@ -250,7 +236,8 @@ int main(int argc, char *argv[]){
 
 	thread workers[w];
 	for(int i = 0; i < w; ++i){
-		workers[i] = thread(worker_thread_function,&request_buffer, &response_buffer, channel, b, filename);
+		FIFORequestChannel * n_channel = createChannel(channel);
+		workers[i] = thread(worker_thread_function,&request_buffer, &response_buffer, n_channel, m, filename);
 	}
 
 	thread hist[h];
@@ -258,7 +245,6 @@ int main(int argc, char *argv[]){
 		hist[i] = thread(histogram_thread_function,&response_buffer,&hc);
 	}
 
-	cout << "Flag 2" << endl;
 	/* Join all threads here */
 	for (int i = 0; i < p;++i){
 		patients[i].join();
@@ -271,6 +257,7 @@ int main(int argc, char *argv[]){
 		request_buffer.push(rq);
 	}
 
+	cout << "Request buffer " << request_buffer.size() << endl;
 	for(int i = 0; i < w; ++i){
 		workers[i].join();
 	}
@@ -289,7 +276,7 @@ int main(int argc, char *argv[]){
     gettimeofday (&end, 0);
 
     // print the results and time difference
-	//hc.print ();
+	hc.print ();
     int secs = (end.tv_sec * 1e6 + end.tv_usec - start.tv_sec * 1e6 - start.tv_usec)/(int) 1e6;
     int usecs = (int)(end.tv_sec * 1e6 + end.tv_usec - start.tv_sec * 1e6 - start.tv_usec)%((int) 1e6);
     cout << "Took " << secs << " seconds and " << usecs << " micro seconds" << endl;

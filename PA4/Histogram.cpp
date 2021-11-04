@@ -19,7 +19,9 @@ void Histogram::update (double value){
 		bin_index = nbins-1;
 
 	//cout << value << "-" << bin_index << endl;
+	mtx.lock();
 	hist [bin_index] ++;
+	mtx.unlock();
 }
 vector<int> Histogram::get_hist(){
 	return hist;

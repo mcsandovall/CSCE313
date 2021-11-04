@@ -27,10 +27,11 @@ void makeFile_request(BoundedBuffer * request_buffer, string filename, int64 fil
 
 	FileRequest * fr = (FileRequest*) buf2;
 	int64 rem = filelen;
-	char buffer[buffer_size];
 	while(rem > 0){
+		memcpy (buf2, &fr, sizeof (FileRequest));
+		strcpy (buf2 + sizeof (FileRequest), filename.c_str());
 		fr->length = min<int64>(rem, (int64) buffer_size);
-		vector<char> rq ((char*) fr, (char*) fr + sizeof(FileRequest));
+		vector<char> rq (buf2, (char*) fr + sizeof(FileRequest));
 		request_buffer->push(rq);
 		rem -= fr->length;
 		fr->offset += fr->length;
@@ -110,7 +111,7 @@ void worker_thread_function(BoundedBuffer * requestBuffer,BoundedBuffer * respon
 		else if(type == FILE_REQ_TYPE){
 		   FileRequest * fr = (FileRequest*) command;
 
-		   const int size = sizeof(filename) + filename.size() + 1;
+		   const int size = sizeof(FileRequest) + filename.size() + 1;
 
 		   channel->cwrite(command, size);
 		   char buffer[buffersize];

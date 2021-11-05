@@ -117,12 +117,8 @@ void worker_thread_function(BoundedBuffer * requestBuffer,BoundedBuffer * respon
 		   channel->cwrite(command, size);
 		   char buffer[buffersize];
 		   mtx->lock();
-		   totalBytes = 0;
-		   while(totalBytes < fr->length){
-			   readSize = channel->cread(&buffer,fr->length);
-			   totalBytes += readSize;
-			   write(fperson, buffer, readSize);
-		   }
+		   readSize = channel->cread(&buffer,fr->length);
+		   write(fperson, buffer, readSize);
 		   mtx->unlock();
 	    }
    }

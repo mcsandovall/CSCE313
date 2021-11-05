@@ -5,6 +5,7 @@
 #include <thread>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <mutex>
 #include <pthread.h>
 
 using namespace std;
@@ -20,21 +21,18 @@ struct server_response{ // structure to hold the response data and patient numbe
 void makeFile_request(BoundedBuffer * request_buffer, string filename, int64 filelen, int buffer_size){
 	// this function makes all the file request and puts them in the request buffer
 	FileRequest fm (0,0);
-	int len = sizeof (FileRequest) + filename.size()+1;
+	int len = sizeof (FileRequest) + filename.size() + 1;
 	char buf2 [len];
-	memcpy (buf2, &fm, sizeof (FileRequest));
-	strcpy (buf2 + sizeof (FileRequest), filename.c_str());
 
-	FileRequest * fr = (FileRequest*) buf2;
 	int64 rem = filelen;
 	while(rem > 0){
-		memcpy (buf2, &fr, sizeof (FileRequest));
+		fm.length = min<int64>(rem, (int64) buffer_size);
+		memcpy (buf2, &fm, sizeof (FileRequest));
 		strcpy (buf2 + sizeof (FileRequest), filename.c_str());
-		fr->length = min<int64>(rem, (int64) buffer_size);
-		vector<char> rq (buf2, (char*) fr + sizeof(FileRequest));
+		vector<char> rq (buf2, buf2 + len);
 		request_buffer->push(rq);
-		rem -= fr->length;
-		fr->offset += fr->length;
+		rem -= fm.length;
+		fm.offset += fm.length;
 	}
 }
 
@@ -59,10 +57,10 @@ void patient_thread_function(int p, int n, BoundedBuffer * requestBuffer){
 		requestBuffer->push(request);
 		dt->seconds += 0.004;
 	}
-	//delete dt;
+	delete dt;
 }
 
-void worker_thread_function(BoundedBuffer * requestBuffer,BoundedBuffer * responseBuffers, FIFORequestChannel * channel, int buffersize, string filename){
+void worker_thread_function(BoundedBuffer * requestBuffer,BoundedBuffer * responseBuffers, FIFORequestChannel * channel, int buffersize, string filename, mutex * mtx){
     /*
 		Functionality of the worker threads	
 		pop from the request buffer 
@@ -70,19 +68,19 @@ void worker_thread_function(BoundedBuffer * requestBuffer,BoundedBuffer * respon
 		recieve the request
 		push the response into respose buffer
     */
-
-   ofstream ofs;
-
-   if(filename != ""){
-	   ofs.open("received/"+ filename, ofstream::binary);
+   int fperson;
+   int totalBytes;
+   int readSize;
+   if(filename !=""){
+	   fperson = open(("./received/" + filename).c_str(), O_CREAT | O_TRUNC | O_WRONLY, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
    }
-
    // cast a pointer of request type
    while(true){
 	   
 	   vector<char> req_v = requestBuffer->pop();
 	   char* command = req_v.data();
 	   REQUEST_TYPE_PREFIX type = *(REQUEST_TYPE_PREFIX*) command;
+	   //cout << "This is the type of request " << type << endl;
 	   
 	   if(type == QUIT_REQ_TYPE){
 		   	// send the quit type to the server to quit the connection for that channel
@@ -109,21 +107,28 @@ void worker_thread_function(BoundedBuffer * requestBuffer,BoundedBuffer * respon
 	   }
 
 		else if(type == FILE_REQ_TYPE){
+			//cout << "File request " << endl;
 		   FileRequest * fr = (FileRequest*) command;
 
-		   const int size = sizeof(FileRequest) + filename.size() + 1;
+		   string file_name = command + sizeof(FileRequest);
+
+		   const int size = sizeof(FileRequest) + file_name.size() + 1;
 
 		   channel->cwrite(command, size);
 		   char buffer[buffersize];
-		   channel->cread(&buffer,buffersize);
-
-		   ofs.seekp( fr->offset);
-		   ofs.write(buffer, fr->length);
+		   mtx->lock();
+		   totalBytes = 0;
+		   while(totalBytes < fr->length){
+			   readSize = channel->cread(&buffer,fr->length);
+			   totalBytes += readSize;
+			   write(fperson, buffer, readSize);
+		   }
+		   mtx->unlock();
 	    }
    }
 
    if(filename != ""){
-	   ofs.close();
+	   close(fperson);
    }
 }
 
@@ -142,7 +147,7 @@ void histogram_thread_function (BoundedBuffer * response_buffer, HistogramCollec
 		server_response rp = *(server_response*) response.data();
 
 		// break the loop if there is a negative value in the request
-		if(rp.p == -1 || rp.data == -1.0){
+		if(rp.p == -1){
 			break;
 		}
 
@@ -186,7 +191,7 @@ int main(int argc, char *argv[]){
 				break;
 		}
 	}
-
+	mutex * mtx = new mutex;
 	int pid = fork ();
 	if (pid < 0){
 		EXITONERROR ("Could not create a child process for running the server");
@@ -225,7 +230,7 @@ int main(int argc, char *argv[]){
 		thread workers[w];
 		for(int i = 0; i < w; ++i){
 			FIFORequestChannel * n_channel = createChannel(channel);
-			workers[i] =  thread (worker_thread_function, &request_buffer, &response_buffer, n_channel, m, filename);
+			workers[i] =  thread (worker_thread_function, &request_buffer, &response_buffer, n_channel, m, filename, mtx);
 		}
 
 		// make histogram threads 
@@ -280,7 +285,7 @@ int main(int argc, char *argv[]){
 		thread workers[w];
 		for(int i = 0; i < w; ++i){
 			FIFORequestChannel * n_channel = createChannel(channel);
-			workers[i] =  thread (worker_thread_function, &request_buffer, &response_buffer, n_channel, m, filename);
+			workers[i] =  thread (worker_thread_function, &request_buffer, &response_buffer, n_channel, m, filename, mtx);
 		}
 
 		// join the threads

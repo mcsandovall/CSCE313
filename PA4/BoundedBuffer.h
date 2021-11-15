@@ -69,6 +69,7 @@ public:
 
 		return data;
 	}
+	int size(){return q.size();}
 };
 
 #endif /* BoundedBuffer_ */

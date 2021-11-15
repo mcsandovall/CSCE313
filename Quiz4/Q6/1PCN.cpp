@@ -11,35 +11,45 @@ using namespace std;
  exactly NP producers run first, then exactly NC, and the whole thing
  should repeat in that order */
 
-#define NP 1    
+#define NP 5    
 #define NC 5
 
 int buffer = 0;
-Semaphore consumerdone (1);
+Semaphore consumerdone (NP);
 Semaphore producerdone (0);
 Semaphore mtx (1); // will use as mutex
 int ncdone = 0; // number of consumers done consuming
+int pcount = 0; // each producer threads has its own count
 
 // each producer gets an id, which is pno	
 void producer_function (int pno){
-	int count = 0; // each producer threads has its own count
+	//int count = 0; // each producer threads has its own count
 	while (true){
 		// do necessary wait
 		consumerdone.P();		// wait for the buffer to be empty
 
 		// after wait is done, do the produce operation
 		// you should not need to change this block
-		//mtx.P();
+		mtx.P();
 		buffer ++;
 		cout << "Producer [" << pno << "] left buffer=" << buffer << endl;
-		//mtx.V();
+		mtx.V();
 
 
 		// now do whatever that would indicate that the producers are done
 		// in this case, the single producer is waking up all NC consumers
 		// this will have to change when you have NP producers
-		for (int i=0; i<NC; i++)
-			producerdone.V();
+
+        mtx.P();
+        ++pcount;
+        if(pcount == NP){
+            for (int i=0; i<NC; i++){
+                producerdone.V();
+            }
+            pcount = 0;
+        }
+        mtx.V();
+        
 	}
 }
 // each consumer gets an id cno
@@ -52,14 +62,18 @@ void consumer_function (int cno){
 		// you should not need to change this block
 		mtx.P();
 		cout << ">>>>>>>>>>>>>>>>>>>>Consumer [" <<cno<<"] got <<<<<<<<<<" << buffer << endl;
+        buffer--;
 		mtx.V();
 		usleep (500000);
 
 		// now do whatever necessary that would indicate that the consumers are all done
 		mtx.P();
 		ncdone ++;
-		if (ncdone == NC){ // it is the last one 
-			consumerdone.V(); // so wake up the producer
+		if (ncdone == NC){ // it is the last one
+            for(int i = 0; i < NP; ++i){
+                consumerdone.V();
+            }
+			// consumerdone.V(); // so wake up the producer
 			ncdone = 0; // reset the counter
 		}
 		mtx.V();

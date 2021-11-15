@@ -198,11 +198,12 @@ int main(int argc, char *argv[]){
 				break;
 		}
 	}
+	
 	srand(time_t(NULL));
 	for (int i=0; i<NUM_PERSONS; i++){
 		populate_file_data(i+1);
 	}
-	
+
 	FIFORequestChannel* control_channel = new FIFORequestChannel ("control", FIFORequestChannel::SERVER_SIDE);
 	handle_process_loop (control_channel);
 	for (int i=0; i<channel_threads.size(); i++){

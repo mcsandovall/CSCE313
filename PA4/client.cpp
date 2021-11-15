@@ -24,7 +24,11 @@ void makeFile_request(BoundedBuffer * request_buffer, string filename, int64 fil
 	int len = sizeof (FileRequest) + filename.size() + 1;
 	char buf2 [len];
 
+	FILE * new_file = fopen(("received/"+filename).c_str(),"w");
+	fclose(new_file);
+
 	int64 rem = filelen;
+	int count =0;
 	while(rem > 0){
 		fm.length = min<int64>(rem, (int64) buffer_size);
 		memcpy (buf2, &fm, sizeof (FileRequest));
@@ -33,6 +37,7 @@ void makeFile_request(BoundedBuffer * request_buffer, string filename, int64 fil
 		request_buffer->push(rq);
 		rem -= fm.length;
 		fm.offset += fm.length;
+		++count;
 	}
 }
 
@@ -51,6 +56,8 @@ void patient_thread_function(int p, int n, BoundedBuffer * requestBuffer){
 	//  the patient needs to send the data to the request buffer, for all n datapoints
 	// add all the arguments to the vector
 	DataRequest * dt = new DataRequest(p, 0.0, 1);
+
+	// delete here if exist
 	
 	for (int i = 0; i < n; ++i){
 		vector<char> request((char *)dt, (char *)dt + sizeof(DataRequest));
@@ -71,9 +78,6 @@ void worker_thread_function(BoundedBuffer * requestBuffer,BoundedBuffer * respon
    int fperson;
    int totalBytes;
    int readSize;
-   if(filename !=""){
-	   fperson = open(("./received/" + filename).c_str(), O_CREAT | O_TRUNC | O_WRONLY, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
-   }
    // cast a pointer of request type
    while(true){
 	   
@@ -117,14 +121,17 @@ void worker_thread_function(BoundedBuffer * requestBuffer,BoundedBuffer * respon
 		   channel->cwrite(command, size);
 		   char buffer[buffersize];
 		   mtx->lock();
-		   readSize = channel->cread(&buffer,fr->length);
-		   write(fperson, buffer, readSize);
+		   fperson = open(("./received/" + filename).c_str(), O_CREAT | O_WRONLY | O_DSYNC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+		   totalBytes = 0;
+		   while(totalBytes < fr->length){
+			   	readSize = channel->cread(buffer,fr->length);
+				totalBytes += readSize;
+				lseek(fperson, fr->offset, 0);
+		   		write(fperson, buffer, readSize);
+		   }
+		   close(fperson);
 		   mtx->unlock();
 	    }
-   }
-
-   if(filename != ""){
-	   close(fperson);
    }
 }
 
@@ -236,7 +243,6 @@ int main(int argc, char *argv[]){
 		}
 
 		/* Join the threads */
-
 		for(int i = 0; i < p; ++i){
 			patients[i].join();
 		}
@@ -309,11 +315,9 @@ int main(int argc, char *argv[]){
 	// close all the channels 
 	Request q (QUIT_REQ_TYPE);
 	channel->cwrite(&q, sizeof(Request));
-	//delete channel; // delete pointer to the channel
-
+	delete channel;
 
 	// client waiting for the server process, which is the child, to terminate
 	wait(0);
 	cout << "Client process exited" << endl;
-
 }

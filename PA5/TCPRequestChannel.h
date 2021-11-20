@@ -1,7 +1,6 @@
 #include <iostream>
 #include <string>
 
-
 using namespace std;
 
 class TCPRequestChannel{
@@ -9,7 +8,7 @@ class TCPRequestChannel{
         /* Since a TCP socket is full-duplex, we need only one.
         This is unlike FIFO that needed one read fd and another
         for write from each side  */
-        int sockfd;
+        int sockfd, client_socket;
     public:
         /* Constructor takes 2 arguments: hostname and port not
         If the host name is an empty string, set up the channel for

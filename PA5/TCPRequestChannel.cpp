@@ -31,7 +31,7 @@ TCPRequestChannel::TCPRequestChannel(const string host_name, const string port_n
          perror("server: socket");
          exit(EXIT_FAILURE);
       }
-      if (bind(sockfd, serv->ai_addr, serv->ai_addrlen) == -1) {
+      if (::bind(sockfd, serv->ai_addr, serv->ai_addrlen) == -1) {
          close(sockfd);
          perror("server: bind");
          exit(EXIT_FAILURE);
@@ -42,17 +42,20 @@ TCPRequestChannel::TCPRequestChannel(const string host_name, const string port_n
          perror("listen");
          exit(1);
       }
+
+      cout << "server: waiting for connections..." << endl;
+      return;
    } // set up client for server side
 
    struct addrinfo hints, *res;
 	int sockfd;
 
 	// first, load up address structs with getaddrinfo():
-	memset(&hints, 0, sizeof hints);
+	memset(&hints, 0, sizeof(hints));
 	hints.ai_family = AF_UNSPEC;
 	hints.ai_socktype = SOCK_STREAM;
 	int status;
-	//getaddrinfo("www.example.com", "3490", &hints, &res);
+	
 	if ((status = getaddrinfo (host_name.c_str(), port_no.c_str(), &hints, &res)) != 0) {
       cerr << "getaddrinfo: " << gai_strerror(status) << endl;
       exit(EXIT_FAILURE);
@@ -65,26 +68,30 @@ TCPRequestChannel::TCPRequestChannel(const string host_name, const string port_n
 		exit(EXIT_FAILURE);
 	}
 
-	// // connect!
-	// if (connect(sockfd, res->ai_addr, res->ai_addrlen)<0){
-	// 	perror ("Cannot Connect");
-	// 	exit(EXIT_FAILURE);
-	// }
-	// cout << "Connected " << endl;
-
-   freeaddrinfo (res);
+   // connect!
+	if (connect(sockfd, res->ai_addr, res->ai_addrlen)<0){
+		perror ("Cannot Connect");
+		exit(EXIT_FAILURE);
+	}
+	//
+	cout << "Connected " << endl;
+	// now it is time to free the memory dynamically allocated onto the "res" pointer by the getaddrinfo function
+	freeaddrinfo (res);
+   return;
 }
 
-TCPRequestChannel::TCPRequestChannel (int client_socket){
+TCPRequestChannel::TCPRequestChannel (int _port_no){
    // create a channel out of a newly accepted client socket
    struct sockaddr_storage their_addr;
    socklen_t sin_size =  sizeof(their_addr);
 
-   sockfd = accept (client_socket, (struct sockaddr *)&their_addr, &sin_size);
-   if (sockfd== -1) {
-      perror("Denied Access");
+   client_socket = accept (_port_no, (struct sockaddr *)&their_addr, &sin_size);
+   if (client_socket == -1) {
+      perror("ERROR Channel not created");
+      exit(EXIT_FAILURE);
    }
-   cout << "Access Granted" << endl;
+   cout << "SUCCESS Channel created" << endl;
+   
    return;
 }
 
@@ -93,11 +100,11 @@ TCPRequestChannel::~TCPRequestChannel(){
 }
 
 int TCPRequestChannel::cread (void* msgbuf, int buflen){
-   return read (sockfd, msgbuf, buflen); 
+   return send (client_socket, msgbuf, buflen, 0);
 }
 
 int TCPRequestChannel::cwrite(void* msgbuf, int msglen){
-   return write (sockfd, msgbuf, msglen);
+   return send (client_socket, msgbuf, msglen, 0);
 }
 
 int TCPRequestChannel::getfd(){

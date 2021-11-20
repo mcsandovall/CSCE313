@@ -1,5 +1,5 @@
 #include "common.h"
-#include "FIFOreqchannel.h"
+#include "TCPRequestChannel.h"
 #include "BoundedBuffer.h"
 #include "HistogramCollection.h"
 #include <thread>
@@ -41,13 +41,13 @@ void makeFile_request(BoundedBuffer * request_buffer, string filename, int64 fil
 	}
 }
 
-FIFORequestChannel * createChannel(FIFORequestChannel * channel){
+TCPRequestChannel * createChannel(TCPRequestChannel * channel){
 	// get a new request channel and return the pointer
 	Request rq(NEWCHAN_REQ_TYPE);
 	channel->cwrite(&rq,sizeof(Request));
 	char buffer [30];
-	channel->cread(&buffer, sizeof(buffer));
-	FIFORequestChannel * new_channel = new FIFORequestChannel(buffer,FIFORequestChannel::CLIENT_SIDE);
+	channel->cread(&buffer, sizeof(buffer)); // get the new channel name
+	TCPRequestChannel * new_channel = new TCPRequestChannel(buffer,(char*) channel->getfd());
 	return new_channel;
 }
 
@@ -67,7 +67,7 @@ void patient_thread_function(int p, int n, BoundedBuffer * requestBuffer){
 	delete dt;
 }
 
-void worker_thread_function(BoundedBuffer * requestBuffer,BoundedBuffer * responseBuffers, FIFORequestChannel * channel, int buffersize, string filename, mutex * mtx){
+void worker_thread_function(BoundedBuffer * requestBuffer,BoundedBuffer * responseBuffers, TCPRequestChannel * channel, int buffersize, string filename, mutex * mtx){
     /*
 		Functionality of the worker threads	
 		pop from the request buffer 
@@ -169,7 +169,9 @@ int main(int argc, char *argv[]){
 	int n = 1;	// [1, 15k] number of data items
 	int w = 50; // [50,5k] worker threads 
 	int h = 1; // histogram threads
-	while ((opt = getopt(argc, argv, "f:p:b:m:n:w:h:")) != -1) {
+	string host_name = "";
+	string port_no = "";
+	while ((opt = getopt(argc, argv, "f:p:b:m:n:w:h:i:r:")) != -1) {
 		switch (opt) {
 			case 'f':
 				filename = optarg;
@@ -192,21 +194,27 @@ int main(int argc, char *argv[]){
 			case 'h':
 				h = atoi(optarg);
 				break;
+			case 'i':
+				host_name = optarg;
+				break;
+			case 'r':
+				port_no = optarg;
+				break;
 		}
 	}
 	mutex * mtx = new mutex;
-	int pid = fork ();
-	if (pid < 0){
-		EXITONERROR ("Could not create a child process for running the server");
-	}
-	if (!pid){ // The server runs in the child process
-		char* args[] = {"./server", "-m", (char*) to_string(m).c_str() ,nullptr};
-		if (execvp(args[0], args) < 0){
-			EXITONERROR ("Could not launch the server");
-		}
-	}
+	// int pid = fork (); //[NOTE]: NOT NEEDED FOR PA5 SINCE THE SERVER WILL BE RAN ON ANOTHER TERMINAL
+	// if (pid < 0){
+	// 	EXITONERROR ("Could not create a child process for running the server");
+	// }
+	// if (!pid){ // The server runs in the child process
+	// 	char* args[] = {"./server", "-m", (char*) to_string(m).c_str() ,nullptr};
+	// 	if (execvp(args[0], args) < 0){
+	// 		EXITONERROR ("Could not launch the server");
+	// 	}
+	// }
 	//make the control channel 
-	FIFORequestChannel * channel = new FIFORequestChannel("control",FIFORequestChannel::CLIENT_SIDE);
+	TCPRequestChannel * channel = new TCPRequestChannel(host_name,port_no);
 
 	// make a request buffer with the buffer size
 	BoundedBuffer request_buffer(b);
@@ -232,7 +240,7 @@ int main(int argc, char *argv[]){
 		// make worker channels
 		thread workers[w];
 		for(int i = 0; i < w; ++i){
-			FIFORequestChannel * n_channel = createChannel(channel);
+			TCPRequestChannel * n_channel = createChannel(channel);
 			workers[i] =  thread (worker_thread_function, &request_buffer, &response_buffer, n_channel, m, filename, mtx);
 		}
 
@@ -286,7 +294,7 @@ int main(int argc, char *argv[]){
 		// make worker channels
 		thread workers[w];
 		for(int i = 0; i < w; ++i){
-			FIFORequestChannel * n_channel = createChannel(channel);
+			TCPRequestChannel * n_channel = createChannel(channel);
 			workers[i] =  thread (worker_thread_function, &request_buffer, &response_buffer, n_channel, m, filename, mtx);
 		}
 

@@ -11,7 +11,6 @@ using namespace std;
 
 TCPRequestChannel::TCPRequestChannel(const string host_name, const string port_no){
    if(host_name.empty()){ // set up channel for server side
-      int sockfd, new_fd;  // listen on sock_fd, new connection on new_fd
       struct addrinfo hints, *serv;
       struct sockaddr_storage their_addr; // connector's address information
       socklen_t sin_size;
@@ -25,16 +24,16 @@ TCPRequestChannel::TCPRequestChannel(const string host_name, const string port_n
 
       if ((rv = getaddrinfo(NULL, port_no.c_str(), &hints, &serv)) != 0) {
          cerr  << "getaddrinfo: " << gai_strerror(rv) << endl;
-         exit(EXIT_FAILURE);
+         return;
       }
       if ((sockfd = socket(serv->ai_family, serv->ai_socktype, serv->ai_protocol)) == -1) {
          perror("server: socket");
-         exit(EXIT_FAILURE);
+         return;
       }
       if (::bind(sockfd, serv->ai_addr, serv->ai_addrlen) == -1) {
          close(sockfd);
          perror("server: bind");
-         exit(EXIT_FAILURE);
+         return;
       }
       freeaddrinfo(serv); // all done with this structure
 

@@ -208,8 +208,9 @@ int main(int argc, char *argv[]){
 	for (int i=0; i<NUM_PERSONS; i++){
 		populate_file_data(i+1);
 	}
-
+	
 	TCPRequestChannel* control_channel = new TCPRequestChannel ("", port_no); // create a new socketfd for the server channel
+	cout << control_channel->getfd() << endl;
 	//handle_process_loop (control_channel);
 	while(1) {  // main accept() loop
         TCPRequestChannel * request_channel = new TCPRequestChannel(control_channel->getfd()); // create a new channel for the request 

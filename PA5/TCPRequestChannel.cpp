@@ -44,7 +44,7 @@ TCPRequestChannel::TCPRequestChannel(const string host_name, const string port_n
 
       cout << "server: waiting for connections..." << endl;
       return;
-   } // set up client for server side
+   } // set up channel for client side
 
    struct addrinfo hints, *res;
 	int sockfd;

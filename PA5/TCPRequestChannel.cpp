@@ -47,7 +47,6 @@ TCPRequestChannel::TCPRequestChannel(const string host_name, const string port_n
    } // set up channel for client side
 
    struct addrinfo hints, *res;
-	int sockfd;
 
 	// first, load up address structs with getaddrinfo():
 	memset(&hints, 0, sizeof(hints));
@@ -84,8 +83,8 @@ TCPRequestChannel::TCPRequestChannel (int _port_no){
    struct sockaddr_storage their_addr;
    socklen_t sin_size =  sizeof(their_addr);
 
-   client_socket = accept (_port_no, (struct sockaddr *)&their_addr, &sin_size);
-   if (client_socket == -1) {
+   sockfd = accept (_port_no, (struct sockaddr *)&their_addr, &sin_size);
+   if (sockfd == -1) {
       perror("ERROR Channel not created");
       exit(EXIT_FAILURE);
    }
@@ -99,11 +98,11 @@ TCPRequestChannel::~TCPRequestChannel(){
 }
 
 int TCPRequestChannel::cread (void* msgbuf, int buflen){
-   return send (client_socket, msgbuf, buflen, 0);
+   return recv (sockfd, msgbuf, buflen, 0);
 }
 
 int TCPRequestChannel::cwrite(void* msgbuf, int msglen){
-   return send (client_socket, msgbuf, msglen, 0);
+   return send (sockfd, msgbuf, msglen, 0);
 }
 
 int TCPRequestChannel::getfd(){

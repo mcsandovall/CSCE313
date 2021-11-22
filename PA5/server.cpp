@@ -29,18 +29,7 @@ char ival;
 vector<string> all_data [NUM_PERSONS];
 vector<thread> channel_threads;
 
-
-void process_newchannel_request (TCPRequestChannel *_channel){
-	nchannels++;
-	string new_channel_name = "data" + to_string(nchannels) + "_";
-	char buf [30];
-	strcpy (buf, new_channel_name.c_str());
-	_channel->cwrite(buf, new_channel_name.size()+1);
-
-	TCPRequestChannel *data_channel = new TCPRequestChannel (new_channel_name, (char*) _channel->getfd()); //this makes a new client_socketfd
-	channel_threads.push_back(thread (handle_process_loop, data_channel));
-}	
-
+	
 void populate_file_data (int person){
 	//cout << "populating for person " << person << endl;
 	string filename = "BIMDC/" + to_string(person) + ".csv";
@@ -154,8 +143,6 @@ void process_request(TCPRequestChannel *rc, Request* r){
 	}
 	else if (r->getType() == FILE_REQ_TYPE){
 		process_file_request (rc, r);
-	}else if (r->getType() == NEWCHAN_REQ_TYPE){
-		process_newchannel_request(rc);
 	}else{
 		process_unknown_request(rc);
 	}

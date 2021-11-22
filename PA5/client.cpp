@@ -113,7 +113,7 @@ int main(int argc, char *argv[]){
 	int opt;
 	int n = 1000;
 	int p = 1;
-	int h = 15000;
+	int h = 100;
 	int w = 100;
 	string host_name = "";
 	string port_no = "";
